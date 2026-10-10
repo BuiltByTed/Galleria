@@ -90,6 +90,7 @@ test('fresh single-origin setup, upload, CSRF, login and restart on a custom web
   assert.match(await (await fetch(f.url)).text(), new RegExp(`window.__RUNTIME_API_URL__ = "${f.url}"`));
   assert.equal((await json(f.url, '/api/setup/initialize', { ...setup, adminUsername: 'bad@username' })).status, 400);
   assert.equal((await json(f.url, '/api/setup/initialize', { ...setup, authMethod: 'unknown' })).status, 400);
+  assert.equal((await json(f.url, '/api/setup/initialize', { ...setup, authMethod: 'google', googleClientId: 'test', googleClientSecret: 'test' })).status, 400);
   // Multipart avatar upload must reach the backend intact during OOBE.
   const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#3388aa' } }).png().toBuffer();
   const avatar = new FormData(); avatar.append('avatar', new Blob([png], { type: 'image/png' }), 'avatar.png');
@@ -132,8 +133,9 @@ test('fresh single-origin setup, upload, CSRF, login and restart on a custom web
   assert.ok(existsSync(path.join(f.data, 'gallery.db')));
 });
 
-test('optional HTTPS domain preserves public URLs, secure cookies and Google callback', { timeout: 120000 }, async t => {
-  const f = await fixture(t, { DOMAIN: 'https://photos.example.com' }, '/data');
+for (const domain of ['', 'https://photos.example.com']) {
+test(`HTTPS proxy with DOMAIN=${domain || '(blank)'} preserves URLs, secure cookies and Google callback`, { timeout: 120000 }, async t => {
+  const f = await fixture(t, { DOMAIN: domain }, '/data');
   const headers = { 'x-forwarded-host': 'photos.example.com', 'x-forwarded-proto': 'https', origin: 'https://photos.example.com' };
   const page = await fetch(f.url, { headers });
   assert.equal(page.status, 200);
@@ -153,6 +155,8 @@ test('optional HTTPS domain preserves public URLs, secure cookies and Google cal
   assert.equal(oauth.status, 302);
   assert.equal(new URL(oauth.headers.get('location')).searchParams.get('redirect_uri'), 'https://photos.example.com/api/auth/google/callback');
 });
+
+}
 
 test('legacy email accounts, persisted API config and split-domain environment survive upgrades', { timeout: 120000 }, async t => {
   const f = await fixture(t, { FRONTEND_DOMAIN: 'https://photos.example.com', BACKEND_DOMAIN: 'https://api.example.com' });
