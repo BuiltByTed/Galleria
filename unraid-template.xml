@@ -21,18 +21,17 @@
   <DonateText>Support the developer</DonateText>
   <DonateLink>https://github.com/sponsors/theodorecharles</DonateLink>
   <Requires>
-    Before first run, you must configure:
-    1. Frontend Domain - The URL where users will access your site (e.g., https://photos.yourdomain.com)
-    2. Backend Domain - The API URL (e.g., https://api.yourdomain.com)
-    3. Data Directory - Persistent storage for photos, database, and config
-    
-    For local/testing: Use http://[SERVER-IP]:3000 and http://[SERVER-IP]:3001
-    For production: Set up reverse proxy (Nginx Proxy Manager recommended) with SSL
+    Open the WebUI and create a username and password. No email or domain is required.
+    For a reverse proxy, forward your one domain to the WebUI port (container port 3000).
+    Domain is optional; include https:// when setting it. Enable SSL in your reverse proxy.
+    Keep your existing Data Directory mapping when updating.
+    Existing split-domain setups remain supported: keep FRONTEND_DOMAIN, BACKEND_DOMAIN,
+    and the API port mapping in your installed container configuration.
+
   </Requires>
   <Config Name="WebUI Port" Target="3000" Default="" Mode="tcp" Description="Frontend web interface port" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
-  <Config Name="API Port" Target="3001" Default="" Mode="tcp" Description="Backend API port" Type="Port" Display="always" Required="true" Mask="false">3001</Config>
+  <Config Name="API Port (Optional, Legacy)" Target="3001" Default="" Mode="tcp" Description="Optional backend port for existing split-domain reverse proxies. New installations only need the WebUI port." Type="Port" Display="advanced" Required="false" Mask="false">3001</Config>
   <Config Name="Data Directory" Target="/app/data" Default="" Mode="rw" Description="Directory for photos, database, and configuration files" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/galleria</Config>
-  <Config Name="Frontend Domain" Target="FRONTEND_DOMAIN" Default="" Mode="" Description="The URL where users access your site. Leave as '-' for local IP access. For production with reverse proxy use https://photos.yourdomain.com" Type="Variable" Display="always" Required="false" Mask="false"/>
-  <Config Name="Backend Domain" Target="BACKEND_DOMAIN" Default="" Mode="" Description="The API URL. Leave blank for local IP access. For production with reverse proxy use https://api.yourdomain.com" Type="Variable" Display="always" Required="false" Mask="false"/> 
+  <Config Name="Domain (Optional)" Target="DOMAIN" Default="" Mode="" Description="Optional public URL, e.g. https://photos.example.com. Leave blank for access by IP or your reverse proxy hostname. Proxy all traffic to the WebUI port; a separate API domain is not needed." Type="Variable" Display="always" Required="false" Mask="false"/>
   <TailscaleStateDir/>
 </Container>

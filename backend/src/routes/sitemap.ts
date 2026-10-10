@@ -1,3 +1,5 @@
+import { publicSiteUrl, requestOrigin } from '../../../shared/deployment.js';
+import { getCurrentConfig } from '../config.js';
 /**
  * Sitemap route handler
  * Generates XML sitemap for search engines
@@ -34,22 +36,7 @@ function getSiteUrl(req: any): string {
     return process.env.SITE_URL!;
   }
   
-  // Fallback: derive from FRONTEND_DOMAIN or request
-  if (isEnvSet(process.env.FRONTEND_DOMAIN)) {
-    return process.env.FRONTEND_DOMAIN!;
-  }
-  
-  // Last resort: derive from current request
-  const protocol = req.protocol || 'https';
-  const host = req.get('host') || 'localhost:3000';
-  
-  // If this is a backend domain (api.* or api-*), convert to frontend domain
-  if (host.startsWith('api.') || host.startsWith('api-')) {
-    const frontendHost = host.replace(/^api(-dev)?\./, 'www$1.');
-    return `${protocol}://${frontendHost}`;
-  }
-  
-  return `${protocol}://${host}`;
+  return publicSiteUrl(getCurrentConfig(), process.env, requestOrigin(req));
 }
 
 router.get('/sitemap.xml', (req, res) => {

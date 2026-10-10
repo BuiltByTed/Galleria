@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import { publicApiUrl, publicSiteUrl, requestOrigin, normalizeOrigin } from "../../../shared/deployment.js";
 import multer from "multer";
 import sharp from "sharp";
 import https from "https";
@@ -18,6 +19,7 @@ import { error, warn, info, debug, verbose } from '../utils/logger.js';
 import { sendInstallationEvent } from '../utils/installation-analytics.js';
 
 const router = Router();
+let initializing = false;
 
 // Configure multer for avatar uploads
 const upload = multer({
@@ -276,11 +278,17 @@ router.get("/status", async (req: Request, res: Response): Promise<void> => {
 router.post(
   "/initialize",
   rejectIfSetupComplete,
+  (req, res, next) => {
+    if (initializing) { res.status(409).json({ error: "Setup is already in progress" }); return; }
+    initializing = true;
+    next();
+  },
   async (req: Request, res: Response): Promise<void> => {
     try {
       const {
         siteName,
         authorizedEmail,
+        adminUsername,
         authMethod,
         adminName,
         adminPassword,
@@ -290,98 +298,35 @@ router.post(
         language,
       } = req.body;
 
-      // Validate required fields
-      if (!siteName || !authorizedEmail || !authMethod) {
-        res.status(400).json({
-          error: "Site name, email, and authentication method are required",
-        });
+      if (typeof siteName !== "string" || !siteName.trim() || !["password", "google"].includes(authMethod)) {
+        res.status(400).json({ error: "Site name and a supported authentication method are required" });
+        return;
+      }
+      // Keep accepting the old password-setup email payload for existing clients.
+      // The legacy email column stores the login identifier; local usernames do
+      // not require a schema migration or a fabricated email address.
+      const identifier = (authMethod === "password" ? adminUsername ?? authorizedEmail : authorizedEmail);
+      const login = typeof identifier === "string" ? identifier.trim() : "";
+      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login);
+      if (authMethod === "password") {
+        if (adminUsername !== undefined ? !/^[A-Za-z0-9][A-Za-z0-9_.-]{2,63}$/.test(login) : !validEmail) {
+          res.status(400).json({ error: "Username must be 3–64 characters: letters, numbers, dots, underscores or hyphens" });
+          return;
+        }
+        if (typeof adminName !== "string" || !adminName.trim() || typeof adminPassword !== "string" || adminPassword.length < 8 || Buffer.byteLength(adminPassword) > 72) {
+          res.status(400).json({ error: "Name and a password of at least 8 characters (at most 72 bytes) are required" });
+          return;
+        }
+      } else if (!validEmail || typeof googleClientId !== "string" || !googleClientId.trim() || typeof googleClientSecret !== "string" || !googleClientSecret.trim()) {
+        res.status(400).json({ error: "A valid email, Google Client ID and Secret are required for Google authentication" });
         return;
       }
 
-      // Auto-detect frontend and backend URLs from request
-      const protocol =
-        req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-      const hostHeader =
-        req.headers["x-forwarded-host"] ||
-        req.headers["host"] ||
-        "localhost:3000";
-      const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-
-      // Determine backend and frontend URLs based on which domain the request came to
-      let backendUrl;
-      let frontendUrl;
-
-      // Extract IP or hostname without port for IP address detection
-      const hostWithoutPort = host.split(":")[0];
-      const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostWithoutPort);
-
-      if (host.includes("localhost")) {
-        // Localhost development
-        backendUrl = "http://localhost:3001";
-        frontendUrl = "http://localhost:3000";
-      } else if (isIpAddress) {
-        // IP address - use same IP for both frontend and backend with different ports
-        // Extract port from host if present, otherwise use defaults
-        const port = host.includes(":") ? host.split(":")[1] : "3000";
-        const frontendPort = port === "3001" ? "3000" : port;
-        const backendPort = port === "3000" ? "3001" : port;
-        
-        frontendUrl = `${protocol}://${hostWithoutPort}:${frontendPort}`;
-        backendUrl = `${protocol}://${hostWithoutPort}:${backendPort}`;
-      } else if (host.startsWith("api.") || host.startsWith("api-")) {
-        // Request came to api.example.com or api-dev.example.com
-        // Backend URL is the current host, frontend is www.domain
-        backendUrl = `${protocol}://${host}`;
-        const domain = host.replace(/^api(-dev)?\./, "");
-        frontendUrl = `${protocol}://www${
-          host.includes("api-dev") ? "-dev" : ""
-        }.${domain}`;
-      } else if (host.startsWith("www.") || host.startsWith("www-")) {
-        // Request came to www.example.com or www-dev.example.com
-        // Frontend URL is the current host, backend is api.domain
-        frontendUrl = `${protocol}://${host}`;
-        const domain = host.replace(/^www(-dev)?\./, "");
-        backendUrl = `${protocol}://api${
-          host.includes("www-dev") ? "-dev" : ""
-        }.${domain}`;
-      } else {
-        // Bare domain (example.com)
-        frontendUrl = `${protocol}://www.${host}`;
-        backendUrl = `${protocol}://api.${host}`;
-      }
-
-      // Extract frontend hostname for allowedHosts (without protocol)
+      // No domain guessing: a blank API URL means the current browser origin.
+      // Explicit legacy variables still select a separate backend.
+      const backendUrl = publicApiUrl();
+      const frontendUrl = publicSiteUrl({}, process.env, normalizeOrigin(req.get("origin")) || requestOrigin(req));
       const frontendHost = new URL(frontendUrl).host;
-
-      info(`[Setup] Auto-detected URLs:`);
-      info(`  Request host: ${host}`);
-      info(`  Frontend: ${frontendUrl}`);
-      info(`  Backend: ${backendUrl}`);
-      info(`  Allowed hosts: ${frontendHost}`);
-
-      // Validate auth method specific fields
-      if (authMethod === "password") {
-        if (!adminName || !adminPassword) {
-          res.status(400).json({
-            error: "Name and password are required for password authentication",
-          });
-          return;
-        }
-        if (adminPassword.length < 8) {
-          res.status(400).json({
-            error: "Password must be at least 8 characters",
-          });
-          return;
-        }
-      } else if (authMethod === "google") {
-        if (!googleClientId || !googleClientSecret) {
-          res.status(400).json({
-            error:
-              "Google Client ID and Secret are required for Google authentication",
-          });
-          return;
-        }
-      }
 
       const projectRoot = path.join(__dirname, "../../../");
       const dataDir = process.env.DATA_DIR || path.join(projectRoot, "data");
@@ -492,7 +437,8 @@ router.post(
       config.branding.language = language || "en";
 
       config.environment.auth.sessionSecret = sessionSecret;
-      config.environment.auth.authorizedEmails = [authorizedEmail];
+      config.environment.auth.authorizedEmails = authMethod === "google" ? [login] : [];
+      config.environment.frontend.siteUrl = frontendUrl;
 
       // Configure Google OAuth if using Google auth method
       if (authMethod === "google" && googleClientId && googleClientSecret) {
@@ -504,9 +450,7 @@ router.post(
         config.environment.auth.google.enabled = false;
       }
 
-      // Save config
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
-      info("Configuration saved to:", configPath);
+      // Publish config only after the admin account has been created successfully.
 
       // Create necessary directories
       const photosDir = path.join(dataDir, "photos");
@@ -588,7 +532,7 @@ router.post(
         );
 
         // Check if user already exists
-        const existingUser = getUserByEmail(authorizedEmail);
+        const existingUser = getUserByEmail(login);
         if (existingUser) {
           info("  ⚠️ User already exists, skipping user creation");
         } else {
@@ -605,9 +549,9 @@ router.post(
             email_verified: boolean;
             role: string;
           } = {
-            email: authorizedEmail,
+            email: login,
             auth_methods: authMethods,
-            email_verified: true, // First user is auto-verified
+            email_verified: authMethod === "google",
             role: "admin", // First user is always admin
           };
 
@@ -627,6 +571,8 @@ router.post(
         });
         return;
       }
+
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 
       // Reload backend configuration
       info("\nReloading backend configuration...");
@@ -742,7 +688,7 @@ router.post(
       const requiresRestart = authMethod === "google";
 
       // Send setup_complete event with origin URL
-      const origin = `${protocol}://${host}`;
+      const origin = requestOrigin(req);
       sendInstallationEvent('setup_complete', {
         auth_method: authMethod,
         site_name: siteName,
@@ -778,6 +724,8 @@ router.post(
         error: "Failed to initialize configuration",
         details: err instanceof Error ? err.message : "Unknown error",
       });
+    } finally {
+      initializing = false;
     }
   }
 );

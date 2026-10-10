@@ -4,6 +4,7 @@
  */
 
 import express from "express";
+import { publicApiUrl } from "../../../shared/deployment.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -61,40 +62,9 @@ const LOGS_DIR = path.join(DATA_DIR, "logs");
  */
 router.get("/runtime", (req, res) => {
   try {
-    // Check if config exists
     const configExists = fs.existsSync(CONFIG_PATH);
-    
-    if (configExists) {
-      // Return API URL from config
-      const configData = fs.readFileSync(CONFIG_PATH, "utf8");
-      const config = JSON.parse(configData);
-      res.json({
-        apiUrl: config.environment.frontend.apiUrl,
-        configExists: true
-      });
-    } else {
-      // OOBE mode - auto-detect API URL from request
-      const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
-      const hostHeader = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
-      const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-      
-      // Determine API URL based on convention
-      let apiUrl;
-      if (host.includes('localhost')) {
-        apiUrl = 'http://localhost:3001';
-      } else if (host.startsWith('www.')) {
-        // www.example.com -> api.example.com
-        apiUrl = `${protocol}://api.${host.substring(4)}`;
-      } else {
-        // example.com -> api.example.com
-        apiUrl = `${protocol}://api.${host}`;
-      }
-      
-      res.json({
-        apiUrl,
-        configExists: false
-      });
-    }
+    const environment = configExists ? JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")).environment : {};
+    res.json({ apiUrl: publicApiUrl(environment), configExists });
   } catch (err) {
     error("[Config] Failed to read runtime config:", err);
     res.status(500).json({ error: "Failed to read runtime configuration" });

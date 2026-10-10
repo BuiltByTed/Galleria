@@ -1,6 +1,6 @@
 {
   "name": "galleria",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "type": "module",
   "private": true,
   "workspaces": [
@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "concurrently --kill-others --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "build": "node build.js",
+    "test:deployment": "node --test shared/deployment.test.js frontend/proxy.test.js scripts/test-deployment.mjs",
     "generate-static-json": "node scripts/generate-static-json.js",
     "generate-favicons": "node scripts/generate-favicons.js",
     "validate-translations": "node scripts/validate-translation-schema.js"

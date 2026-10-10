@@ -5,6 +5,8 @@
 
 // Load environment variables from .env file first (before any other imports)
 import dotenv from "dotenv";
+import crypto from 'node:crypto';
+import { normalizeOrigin } from '../../shared/deployment.js';
 dotenv.config();
 
 import fs from "fs";
@@ -28,7 +30,7 @@ const defaultConfig = {
   environment: {
     frontend: {
       port: 3000,
-      apiUrl: "http://localhost:3001",
+      apiUrl: "",
     },
     backend: {
       port: 3001,
@@ -48,7 +50,7 @@ const defaultConfig = {
         clientId: "",
         clientSecret: "",
       },
-      sessionSecret: "temporary-session-secret-for-setup",
+      sessionSecret: crypto.randomBytes(32).toString('hex'),
       authorizedEmails: [],
     },
   },
@@ -128,6 +130,10 @@ export function isEnvSet(value: string | undefined): boolean {
 // Export dynamic getters for config values that can change
 export function getAllowedOrigins(): string[] {
   const origins: string[] = [];
+  const domain = normalizeOrigin(process.env.DOMAIN);
+  if (domain) origins.push(domain);
+  const siteUrl = fullConfig.environment.frontend.siteUrl;
+  if (siteUrl) origins.push(siteUrl);
 
   trace("[CORS Debug] Environment variables:");
   trace("  FRONTEND_DOMAIN:", process.env.FRONTEND_DOMAIN || "(not set)");

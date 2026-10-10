@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { requestOrigin } from '../../shared/deployment.js';
 import config, { getAllowedOrigins } from './config.js';
 import { info, warn, error, debug, verbose, trace } from './utils/logger.js';
 import { originsEqual } from './utils/origins-equal.js';
@@ -74,9 +75,11 @@ export function validateProductionSecurity() {
   if (isProduction) {
     // Load the config to check if required values are present
     const requiredChecks = [
-      { name: 'GOOGLE_CLIENT_SECRET', value: secureConfig.auth?.google?.clientSecret },
       { name: 'SESSION_SECRET', value: secureConfig.auth?.sessionSecret }
     ];
+    if (secureConfig.auth?.google?.enabled) {
+      requiredChecks.push({ name: 'GOOGLE_CLIENT_SECRET', value: secureConfig.auth.google.clientSecret });
+    }
     
     // Only check analytics credentials if analytics is enabled
     const analyticsEnabled = secureConfig.analytics?.enabled;
@@ -184,6 +187,9 @@ export function csrfProtection(req: any, res: any, next: any) {
     
     // Exact origin match (not startsWith — confusable subdomain bypass)
     let isAllowedOrigin = allowedOrigins.some((allowed: string) => originsEqual(origin, allowed));
+    // The WebUI proxy preserves the public Host and protocol, including custom
+    // Unraid ports. Only an exact same-origin request bypasses the CORS list.
+    try { isAllowedOrigin ||= originsEqual(origin, requestOrigin(req)); } catch { /* reject malformed hosts */ }
     
     // If not in allowed list, check for localhost
     if (!isAllowedOrigin) {

@@ -137,10 +137,11 @@ const FrontendSettings: React.FC<FrontendSettingsProps> = ({
         </div>
 
         <div className="branding-group">
-          <label className="branding-label">API URL</label>
+          <label className="branding-label">API URL (optional)</label>
           <input
             type="text"
             value={config.environment.frontend.apiUrl}
+            placeholder="Leave blank to use the site URL"
             onChange={(e) =>
               updateConfig(
                 ["environment", "frontend", "apiUrl"],

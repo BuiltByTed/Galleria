@@ -4,6 +4,7 @@
  */
 
 import nodemailer from "nodemailer";
+import { publicSiteUrl } from "../../shared/deployment.js";
 import { getCurrentConfig } from "./config.js";
 import { error, info } from "./utils/logger.js";
 import { translateBackend, getGlobalLocale } from "./i18n-backend.js";
@@ -65,14 +66,7 @@ export function isEmailServiceEnabled(): boolean {
 export function generateInvitationUrl(inviteToken: string): string {
   const config = getCurrentConfig();
 
-  // Get frontend URL - use allowedOrigins[0] as it's the actual frontend URL
-  let frontendUrl = "http://localhost:3000";
-  if (
-    config.backend?.allowedOrigins &&
-    config.backend.allowedOrigins.length > 0
-  ) {
-    frontendUrl = config.backend.allowedOrigins[0];
-  }
+  const frontendUrl = publicSiteUrl(config) || "http://localhost:3000";
 
   return `${frontendUrl}/invite/${inviteToken}`;
 }
@@ -118,14 +112,7 @@ export async function sendInvitationEmail(
   const config = getCurrentConfig();
   const siteName = config.branding?.siteName || "Galleria";
 
-  // Get frontend URL - use allowedOrigins[0] as it's the actual frontend URL
-  let frontendUrl = "http://localhost:3000";
-  if (
-    config.backend?.allowedOrigins &&
-    config.backend.allowedOrigins.length > 0
-  ) {
-    frontendUrl = config.backend.allowedOrigins[0];
-  }
+  const frontendUrl = publicSiteUrl(config) || "http://localhost:3000";
 
   const inviteUrl = `${frontendUrl}/invite/${inviteToken}`;
 
@@ -260,14 +247,7 @@ export async function sendPasswordResetEmail(
   const config = getCurrentConfig();
   const siteName = config.branding?.siteName || "Galleria";
 
-  // Get frontend URL - use allowedOrigins[0] as it's the actual frontend URL
-  let frontendUrl = "http://localhost:3000";
-  if (
-    config.backend?.allowedOrigins &&
-    config.backend.allowedOrigins.length > 0
-  ) {
-    frontendUrl = config.backend.allowedOrigins[0];
-  }
+  const frontendUrl = publicSiteUrl(config) || "http://localhost:3000";
 
   const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 

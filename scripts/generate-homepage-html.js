@@ -16,7 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const projectRoot = path.join(__dirname, '..');
-const dataDir = path.join(projectRoot, 'data');
+const dataDir = process.env.DATA_DIR || path.join(projectRoot, 'data');
 const frontendDistDir = path.join(projectRoot, 'frontend', 'dist');
 const configPath = path.join(dataDir, 'config.json');
 const dbPath = path.join(dataDir, 'gallery.db');
@@ -176,20 +176,8 @@ async function generateHomepageHtml() {
     
     // Determine API URL from environment or config
     // Priority: environment variable > config file > default
-    let apiUrl = process.env.API_URL || process.env.BACKEND_DOMAIN;
-    if (!apiUrl) {
-      apiUrl = config.environment?.backend?.apiUrl || "http://localhost:3001";
-    }
-    
-    log(`Using API URL: ${apiUrl}`);
-
-    // Derive site URL
-    let siteUrl;
-    if (apiUrl.includes("localhost")) {
-      siteUrl = apiUrl.replace(":3001", ":3000");
-    } else {
-      siteUrl = apiUrl.replace(/api(-dev)?\./, "www$1.");
-    }
+    const apiUrl = '__GALLERIA_API_ORIGIN__';
+    const siteUrl = '__GALLERIA_SITE_ORIGIN__';
 
     // Read homepage.json if it exists
     let homepageData = null;

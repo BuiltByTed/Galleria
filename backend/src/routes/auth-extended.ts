@@ -288,12 +288,14 @@ async function trackFailedLogin(email: string, ipAddress: string): Promise<void>
  */
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password, mfaToken } = req.body;
+    const { password, mfaToken } = req.body;
+    const identifier = req.body.username ?? req.body.email;
+    const email = typeof identifier === "string" ? identifier.trim() : "";
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
     const ipString = Array.isArray(ipAddress) ? ipAddress[0] : ipAddress;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Missing email or password' });
+    if (!email || typeof password !== 'string' || !password) {
+      return res.status(400).json({ error: 'Missing username or password' });
     }
 
     // Find user by email
@@ -719,7 +721,7 @@ router.post('/password-reset/request', async (req: Request, res: Response) => {
     // Uniform response for unknown emails and MFA accounts — do not reveal
     // registration or MFA status. Self-service reset is only issued for
     // non-MFA accounts; MFA recovery is via authenticated admin paths.
-    if (!user || user.mfa_enabled) {
+    if (!user || user.mfa_enabled || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) {
       return res.json({ success: true, message: 'If the email exists, a password reset link has been sent' });
     }
 

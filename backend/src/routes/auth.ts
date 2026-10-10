@@ -5,6 +5,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import passport from 'passport';
+import { publicApiUrl, publicSiteUrl } from '../../../shared/deployment.js';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import config, { DATA_DIR, getCurrentConfig, isEnvSet } from '../config.js';
 import fs from 'fs';
@@ -81,7 +82,7 @@ export function initializeGoogleStrategy() {
   
   const googleConfig = latestConfig.environment?.auth?.google;
   const authorizedEmails = latestConfig.environment?.auth?.authorizedEmails || [];
-  const callbackURL = `${latestConfig.environment?.frontend?.apiUrl}/api/auth/google/callback`;
+  const callbackURL = `${publicApiUrl(latestConfig.environment) || publicSiteUrl(latestConfig.environment)}/api/auth/google/callback`;
 
   info('📋 OAuth config check:');
   info('  - Client ID:', googleConfig?.clientId ? 'Present' : 'Missing');
@@ -220,21 +221,9 @@ router.get(
         warn('[Auth] Could not reload config, using default');
       }
       
-      // Derive frontend URL from environment or config
-      let frontendUrl: string;
-      const apiUrl = currentConfig.environment?.frontend?.apiUrl || currentConfig.frontend?.apiUrl || '';
-      const isProduction = apiUrl.startsWith('https://');
-      
-      // First, try FRONTEND_DOMAIN environment variable (most reliable)
-      if (isEnvSet(process.env.FRONTEND_DOMAIN)) {
-        frontendUrl = process.env.FRONTEND_DOMAIN!;
-      } else {
-        // Fallback: derive from config
-        const frontendPort = currentConfig.environment?.frontend?.port || currentConfig.frontend?.port || 3000;
-        frontendUrl = isProduction
-          ? apiUrl.replace(/^https:\/\/api([-\.])/, 'https://www$1')
-          : apiUrl.replace(':3001', `:${frontendPort}`);
-      }
+      const environment = currentConfig.environment || currentConfig;
+      const frontendUrl = publicSiteUrl(environment);
+      const isProduction = frontendUrl.startsWith("https://");
 
       // Handle authentication errors
       if (err) {

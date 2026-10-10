@@ -11,13 +11,13 @@ import { getApiUrl } from './utils/apiUrl';
 export const API_URL = getApiUrl();
 
 // Other config values from build process
-export const SITE_URL = import.meta.env.VITE_SITE_URL;
+export const SITE_URL = typeof window !== 'undefined' ? window.location.origin : import.meta.env.VITE_SITE_URL;
 export const SITE_NAME = import.meta.env.VITE_SITE_NAME;
 export const ANALYTICS_ENABLED = import.meta.env.VITE_ANALYTICS_ENABLED === 'true';
 export const cacheBustValue = 0;
 
 // Additional values for HTML meta tags
-export const SITE_URL_FULL = import.meta.env.VITE_SITE_URL_FULL;
+export const SITE_URL_FULL = SITE_URL;
 export const API_URL_FULL = getApiUrl();
 export const AVATAR_PATH = import.meta.env.VITE_AVATAR_PATH;
 

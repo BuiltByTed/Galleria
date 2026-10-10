@@ -6,6 +6,7 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
+import { publicApiUrl, publicSiteUrl } from './shared/deployment.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,22 +20,17 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 // Set ALL environment variables from config.json
 const frontendConfig = config.environment.frontend;
 
-// Derive site URL from API URL
-// If apiUrl includes localhost, change port from 3001 to 3000
-// Otherwise, replace api. or api- with www. or www-
-const apiUrl = frontendConfig.apiUrl;
-const siteUrl = apiUrl.includes('localhost')
-  ? apiUrl.replace(':3001', ':3000')
-  : apiUrl.replace(/api(-dev)?\./, 'www$1.');
+const apiUrl = publicApiUrl(config.environment);
+const siteUrl = publicSiteUrl(config.environment);
 
-process.env.VITE_API_URL = frontendConfig.apiUrl;
+process.env.VITE_API_URL = apiUrl;
 process.env.VITE_SITE_URL = siteUrl;
 process.env.VITE_SITE_NAME = config.branding.siteName;
 process.env.VITE_ANALYTICS_ENABLED = String(config.analytics?.openobserve?.enabled || false);
 
 // Additional values for HTML meta tags
 process.env.VITE_SITE_URL_FULL = siteUrl;
-process.env.VITE_API_URL_FULL = frontendConfig.apiUrl;
+process.env.VITE_API_URL_FULL = apiUrl;
 process.env.VITE_AVATAR_PATH = config.branding.avatarPath;
 process.env.SITE_URL = siteUrl; // For backend sitemap generation
 

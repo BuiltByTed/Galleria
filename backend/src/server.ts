@@ -31,6 +31,7 @@ import config, {
   RATE_LIMIT_MAX_REQUESTS,
   getLogLevel,
   isEnvSet,
+  getCurrentConfig,
 } from "./config.ts";
 import { validateProductionSecurity } from "./security.ts";
 import { initializeDatabase } from "./database.ts";
@@ -401,27 +402,36 @@ app.use((req: Request, res: Response, next) => {
 
 // Session middleware with dynamic cookie configuration
 // Cookie domain and secure flag are set per-request based on how the user accesses the site
-app.use(
-  session({
-    store: new SqliteStore({
-      client: db,
-      expired: {
-        clear: true,
-        intervalMs: 900000, // Clean up expired sessions every 15 minutes
+const sessionStore = new SqliteStore({
+  client: db,
+  expired: {
+    clear: true,
+    intervalMs: 900000, // Clean up expired sessions every 15 minutes
+  },
+});
+let activeSessionSecret: string;
+let sessionMiddleware: ReturnType<typeof session>;
+app.use((req, res, next) => {
+  // OOBE publishes a permanent secret without restarting the container.
+  const secret = process.env.SESSION_SECRET || getCurrentConfig().auth.sessionSecret;
+  if (secret !== activeSessionSecret) {
+    activeSessionSecret = secret;
+    sessionMiddleware = session({
+      store: sessionStore,
+      secret,
+      resave: false,
+      saveUninitialized: false,
+      rolling: true, // Extend sessions during long uploads
+      cookie: {
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,
+        secure: "auto",
+        sameSite: "lax",
       },
-    }),
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true, // Extend session on every request to prevent expiration during long uploads
-    cookie: {
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      secure: "auto" as any, // Will be set dynamically
-      sameSite: "lax" as any,
-    },
-  })
-);
+    });
+  }
+  sessionMiddleware(req, res, next);
+});
 
 // Middleware to apply dynamic cookie options after session is initialized
 app.use((req: Request, res: Response, next) => {

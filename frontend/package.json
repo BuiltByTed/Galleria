@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "TS_NODE_PROJECT=tsconfig.app.json TS_NODE_TRANSPILE_ONLY=true node --test --loader ts-node/esm src/components/AdminPortal/AlbumsManager/handlers/optimizationStreamState.test.ts && TS_NODE_PROJECT=tsconfig.test.json TS_NODE_TRANSPILE_ONLY=true node --test --loader ts-node/esm tests/*.test.ts && vitest run src/App.test.tsx",
+    "test": "TS_NODE_PROJECT=tsconfig.app.json TS_NODE_TRANSPILE_ONLY=true node --test --loader ts-node/esm src/components/AdminPortal/AlbumsManager/handlers/optimizationStreamState.test.ts && TS_NODE_PROJECT=tsconfig.test.json TS_NODE_TRANSPILE_ONLY=true node --test --loader ts-node/esm tests/*.test.ts && vitest run src/App.test.tsx src/components/SetupWizard/SetupWizard.test.tsx",
     "preview": "vite preview",
     "start": "node server.js"
   },
