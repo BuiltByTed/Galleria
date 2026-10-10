@@ -104,7 +104,11 @@
     "noContentYet": "尚无内容",
     "albumEmpty": "此相册为空。请登录以添加内容。",
     "homepageEmpty": "添加一些相册或使用主页切换将它们添加到主页。",
-    "goToAdminPanel": "前往管理面板"
+    "goToAdminPanel": "前往管理面板",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "播放幻灯片",
+    "pauseSlideshow": "暂停幻灯片"
   },
   "video": {
     "resolution": "分辨率",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "在公共画廊中显示此相册。",
     "folderControlsPublished": "此相册继承其文件夹的发布状态。",
     "homepageVisibilityDescription": "在主页上包含此相册的照片。",
-    "downloadsVisibilityDescription": "允许访客从此相册下载全尺寸优化照片。"
+    "downloadsVisibilityDescription": "允许访客从此相册下载全尺寸优化照片。",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} 设置已保存！",
@@ -913,7 +924,20 @@
     "custom": "自定义...",
     "generate": "生成",
     "invalidCustomTime": "请输入有效的分钟数",
-    "copied": "✓ 已复制！"
+    "copied": "✓ 已复制！",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "分享视频",

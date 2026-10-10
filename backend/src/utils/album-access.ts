@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import { getAlbumState, getShareLinkBySecret, isShareLinkExpired } from '../database.js';
+import { getUserByEmail, getUserById } from '../database-users.js';
 
 type AlbumState = NonNullable<ReturnType<typeof getAlbumState>>;
 
@@ -10,8 +11,34 @@ export interface AlbumAccessResult {
   reason: 'not_found' | 'published' | 'authenticated' | 'share_link' | 'denied';
 }
 
+/**
+ * True if the request has a live, active user session.
+ * Re-validates against the DB (same rules as requireAuth) so deleted or
+ * deactivated accounts do not retain access to unpublished content.
+ */
 export function isRequestAuthenticated(req: Request): boolean {
-  return Boolean((req.isAuthenticated && req.isAuthenticated()) || (req.session as any)?.userId);
+  // Credential login: session.userId is the DB numeric id
+  if ((req.session as any)?.userId != null) {
+    const userId = Number((req.session as any).userId);
+    if (!Number.isFinite(userId)) {
+      return false;
+    }
+    const dbUser = getUserById(userId);
+    return Boolean(dbUser && dbUser.is_active);
+  }
+
+  // Passport (Google OAuth): req.user is { id: googleProfileId, email, ... }
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    const sessionUser = req.user as any;
+    if (sessionUser?.email) {
+      const dbUser = getUserByEmail(sessionUser.email);
+      return Boolean(dbUser && dbUser.is_active);
+    }
+    // Cannot verify without email — do not grant content access
+    return false;
+  }
+
+  return false;
 }
 
 export function getShareKeyFromRequest(req: Request): string | null {

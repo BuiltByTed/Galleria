@@ -30,33 +30,29 @@ const MAX_TIMEOUT_MS = 2147483647;
  * Send notification to all admins about an expired share link
  */
 async function notifyExpiredLink(link: ShareLink): Promise<void> {
-  try {
-    const admins = getAllUsers().filter(u => u.role === 'admin');
+  const admins = getAllUsers().filter(u => u.role === 'admin');
 
-    for (const admin of admins) {
-      const title = await translateNotification(
-        'notifications.backend.shareLinkExpiredTitle',
-        { albumName: link.album }
-      );
-      const body = await translateNotification(
-        'notifications.backend.shareLinkExpiredBody',
-        { albumName: link.album }
-      );
+  for (const admin of admins) {
+    const title = await translateNotification(
+      'notifications.backend.shareLinkExpiredTitle',
+      { albumName: link.album }
+    );
+    const body = await translateNotification(
+      'notifications.backend.shareLinkExpiredBody',
+      { albumName: link.album }
+    );
 
-      await sendNotificationToUser(admin.id, {
-        title,
-        body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        tag: 'share-link-expired',
-        requireInteraction: false
-      }, 'shareLinkExpired');
-    }
-
-    info(`[ShareLinkExpiryTracker] Notified admins about expired link for album: ${link.album}`);
-  } catch (err) {
-    error('[ShareLinkExpiryTracker] Failed to notify about expired link:', err);
+    await sendNotificationToUser(admin.id, {
+      title,
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'share-link-expired',
+      requireInteraction: false
+    }, 'shareLinkExpired');
   }
+
+  info(`[ShareLinkExpiryTracker] Notified admins about expired link for album: ${link.album}`);
 }
 
 /**
@@ -216,4 +212,3 @@ export function startShareLinkExpiryTracking(): void {
   info('[ShareLinkExpiryTracker] Starting share link expiry tracking with precise timers');
   loadAndScheduleExpiryTimers();
 }
-

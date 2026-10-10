@@ -1,4 +1,6 @@
 import express from "express";
+import { publicApiUrl, publicSiteUrl, requestOrigin } from "../shared/deployment.js";
+import { backendProxy } from "./proxy.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -22,7 +24,7 @@ let headerAvatarBase64Cache = null;
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "../data");
 const configPath = path.join(dataDir, "config.json");
 const photosDir = path.join(dataDir, "photos");
-const envApiUrl = process.env.API_URL || process.env.BACKEND_DOMAIN;
+const backendTarget = process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:3001";
 
 // Load initial configuration
 let configFile;
@@ -57,9 +59,8 @@ function loadConfig() {
     config = configFile.environment;
 
     // Override API URL from environment if provided
-    if (envApiUrl) {
-      config.frontend.apiUrl = envApiUrl;
-    }
+    config.frontend.apiUrl = publicApiUrl(config);
+    isSetupMode = false;
 
     // Reload header avatar base64 (in case avatar was updated)
     loadHeaderAvatarBase64();
@@ -81,7 +82,7 @@ if (fs.existsSync(configPath)) {
   config = {
     frontend: {
       port: 3000,
-      apiUrl: envApiUrl || "http://localhost:3001",
+      apiUrl: publicApiUrl(),
     },
     security: {
       allowedHosts: ["localhost:3000", "127.0.0.1:3000"],
@@ -96,27 +97,17 @@ if (fs.existsSync(configPath)) {
  * This prevents flash of unstyled/wrong-themed content
  */
 function buildThemeScript(apiUrl, brandingData) {
-  return `window.__RUNTIME_API_URL__ = "${apiUrl}"; window.__RUNTIME_BRANDING__ = ${JSON.stringify(brandingData)}; (function(){var b=window.__RUNTIME_BRANDING__;if(b){document.documentElement.setAttribute("data-header-theme",b.headerTheme||"light");document.documentElement.setAttribute("data-header-dropdown-theme",b.headerDropdownTheme||"light");document.documentElement.setAttribute("data-photo-grid-theme",b.photoGridTheme||"dark");if(b.headerTheme==="custom"){var s=document.documentElement.style;s.setProperty("--header-bg-color",b.headerBackgroundColor||"#e7e7e7");s.setProperty("--header-text-color",b.headerTextColor||"#1e1e1e");s.setProperty("--header-opacity",b.headerOpacity??1);s.setProperty("--header-blur",b.headerBlur??0);s.setProperty("--header-border-color",b.headerBorderColor||"#1e1e1e");s.setProperty("--header-border-opacity",b.headerBorderOpacity??0.2)}}})();`;
+  return `window.__RUNTIME_API_URL__ = ${JSON.stringify(apiUrl).replace(/</g, "\\u003c")}; window.__RUNTIME_BRANDING__ = ${JSON.stringify(brandingData)}; (function(){var b=window.__RUNTIME_BRANDING__;if(b){document.documentElement.setAttribute("data-header-theme",b.headerTheme||"light");document.documentElement.setAttribute("data-header-dropdown-theme",b.headerDropdownTheme||"light");document.documentElement.setAttribute("data-photo-grid-theme",b.photoGridTheme||"dark");if(b.headerTheme==="custom"){var s=document.documentElement.style;s.setProperty("--header-bg-color",b.headerBackgroundColor||"#e7e7e7");s.setProperty("--header-text-color",b.headerTextColor||"#1e1e1e");s.setProperty("--header-opacity",b.headerOpacity??1);s.setProperty("--header-blur",b.headerBlur??0);s.setProperty("--header-border-color",b.headerBorderColor||"#1e1e1e");s.setProperty("--header-border-opacity",b.headerBorderOpacity??0.2)}}})();`;
 }
 
-// Watch config file for changes and reload automatically
-if (!isSetupMode) {
-  fs.watch(configPath, (eventType) => {
-    if (eventType === "change") {
-      // Debounce: wait a bit for write to complete
-      setTimeout(() => {
-        try {
-          loadConfig();
-        } catch (err) {
-          error("[Frontend] Failed to reload config:", err);
-        }
-      }, 100);
-    }
-  });
-  info("[Frontend] Watching config.json for changes");
-}
+// watchFile also notices a config created by OOBE and atomic replacements.
+fs.watchFile(configPath, { interval: 1000 }, () => {
+  try { if (fs.existsSync(configPath)) loadConfig(); }
+  catch (err) { error("[Frontend] Failed to reload config:", err); }
+});
 
 const app = express();
+app.set("trust proxy", 1);
 const port = process.env.PORT || config.frontend.port;
 
 // Security headers middleware (except CSP which needs runtime API URL)
@@ -138,24 +129,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Allowed hosts for security (prevent open redirect attacks)
-// Include both config.json values and FRONTEND_DOMAIN from environment
-const allowedHosts = [...config.security.allowedHosts];
-
-// Add FRONTEND_DOMAIN from environment if set
-if (process.env.FRONTEND_DOMAIN && process.env.FRONTEND_DOMAIN !== "-") {
-  try {
-    const frontendUrl = new URL(process.env.FRONTEND_DOMAIN);
-    const frontendHost = frontendUrl.host; // includes port if present
-    if (!allowedHosts.includes(frontendHost)) {
-      allowedHosts.push(frontendHost);
-      info(`[Security] Added FRONTEND_DOMAIN to allowedHosts: ${frontendHost}`);
-    }
-  } catch (e) {
-    warn(
-      `[Security] Invalid FRONTEND_DOMAIN URL: ${process.env.FRONTEND_DOMAIN}`
-    );
-  }
+function allowedHosts() {
+  const hosts = [...(config.security?.allowedHosts || [])];
+  const site = publicSiteUrl(config);
+  if (site) hosts.push(new URL(site).host);
+  return hosts;
 }
 
 // HTTPS redirect middleware (only in production)
@@ -163,7 +141,7 @@ app.use((req, res, next) => {
   const host = req.get("host");
 
   // Skip host validation during setup mode (OOBE)
-  if (!isSetupMode) {
+  if (!isSetupMode && publicApiUrl(config)) {
     // Validate host to prevent open redirect attacks
     // Allow IP addresses for direct container access (e.g., Unraid WebUI)
     const ipPattern = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
@@ -171,9 +149,9 @@ app.use((req, res, next) => {
     const isLocalhost =
       host && (host.startsWith("localhost") || host.startsWith("127.0.0.1"));
 
-    if (!allowedHosts.includes(host) && !isIpAddress && !isLocalhost) {
+    if (!allowedHosts().includes(host) && !isIpAddress && !isLocalhost) {
       warn(`[Security] Invalid host header: ${host}`);
-      warn(`[Security] Allowed hosts: ${allowedHosts.join(", ")}`);
+      warn(`[Security] Allowed hosts: ${allowedHosts().join(", ")}`);
       return res.status(400).send("Invalid host header");
     }
   }
@@ -182,7 +160,7 @@ app.use((req, res, next) => {
   // Skip HTTPS redirect for IP addresses (e.g., direct Docker access)
   const ipPattern = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
   const isIpAddress = ipPattern.test(host);
-  const isProduction = config.frontend.apiUrl.startsWith("https://");
+  const isProduction = publicSiteUrl(config).startsWith("https://");
   if (
     isProduction &&
     req.headers["x-forwarded-proto"] !== "https" &&
@@ -242,86 +220,9 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Frontend server is running" });
 });
 
-// Proxy all /api/* requests to backend
-app.use("/api", express.json(), async (req, res, next) => {
-  const apiUrl = config.frontend.apiUrl;
-  const targetUrl = `${apiUrl}${req.originalUrl}`;
-  
-  try {
-    // Forward the request to the backend
-    const response = await fetch(targetUrl, {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': req.headers.cookie || '',
-        'X-CSRF-Token': req.headers['x-csrf-token'] || '',
-      },
-      body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
-    });
-    
-    // Forward the response back to the client
-    const contentType = response.headers.get('content-type');
-    
-    // Set status and headers
-    res.status(response.status);
-    if (contentType) {
-      res.setHeader('Content-Type', contentType);
-    }
-    
-    // Handle different content types
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      res.json(data);
-    } else {
-      const data = await response.text();
-      res.send(data);
-    }
-  } catch (err) {
-    error(`[API Proxy] Failed to proxy request to ${targetUrl}:`, err);
-    res.status(500).json({ error: 'Proxy error', message: err.message });
-  }
-});
-
-// Proxy for push notification endpoints (fixes Safari PWA content blocker)
-// Safari blocks URLs containing /api/ even when same-origin, so we use /notifications/
-app.use("/notifications", express.json(), async (req, res) => {
-  const apiUrl = config.frontend.apiUrl;
-  // Map /notifications/* to /api/push-notifications/* on backend
-  const backendPath = req.path.replace(/^\//, '/api/push-notifications/');
-  const targetUrl = `${apiUrl}${backendPath}${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`;
-
-  info(`[Notifications Proxy] ${req.method} ${req.path} -> ${targetUrl}`);
-
-  try {
-    // Forward the request to the backend (using Node's built-in fetch)
-    const response = await fetch(targetUrl, {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': req.headers.cookie || '',
-        'X-CSRF-Token': req.headers['x-csrf-token'] || '',
-      },
-      body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
-    });
-
-    info(`[Notifications Proxy] Response status: ${response.status}`);
-
-    // Forward the response back to the client
-    const data = await response.text();
-    res.status(response.status);
-
-    // Copy relevant headers
-    const contentType = response.headers.get('content-type');
-    if (contentType) {
-      res.setHeader('Content-Type', contentType);
-    }
-
-    res.send(data);
-  } catch (err) {
-    error(`[Notifications Proxy] Failed to proxy ${req.method} ${req.path} to ${targetUrl}:`, err.message);
-    res.status(500).json({ error: 'Proxy error', message: err.message });
-  }
-});
+// All browser-facing backend routes are available through the WebUI port.
+app.use(["/api", "/photos", "/optimized", "/videos", "/sitemap.xml", "/robots.txt", "/logs"], backendProxy(backendTarget));
+app.use("/notifications", backendProxy(backendTarget, url => url.replace(/^\/notifications(?=\/|\?|$)/, '/api/push-notifications')));
 
 // Serve dynamic manifest.json with branding values
 app.get("/manifest.json", (req, res) => {
@@ -329,13 +230,8 @@ app.get("/manifest.json", (req, res) => {
   const avatarPath = configFile.branding?.avatarPath || "/photos/avatar.png";
 
   // Derive site URL from API URL
-  const apiUrl = config.frontend.apiUrl;
-  let siteUrl;
-  if (apiUrl.includes("localhost")) {
-    siteUrl = apiUrl.replace(":3001", ":3000");
-  } else {
-    siteUrl = apiUrl.replace(/api(-dev)?\./, "www$1.");
-  }
+  const apiUrl = publicApiUrl(config) || requestOrigin(req);
+  const siteUrl = publicSiteUrl(config, process.env, requestOrigin(req));
 
   // Build full avatar URL
   const avatarUrl = `${apiUrl}${avatarPath}`;
@@ -431,12 +327,10 @@ function escapeHtml(str) {
 /**
  * Replace runtime placeholders with current config values
  */
-function replaceRuntimePlaceholders(html, apiUrl) {
+function replaceRuntimePlaceholders(html, apiUrl, siteUrl = publicSiteUrl(config) || apiUrl) {
   const siteName = configFile.branding?.siteName || "Galleria";
   const avatarPath = configFile.branding?.avatarPath || "/photos/avatar.png";
-  const runtimeSiteUrl = apiUrl.includes("localhost")
-    ? apiUrl.replace(":3001", ":3000")
-    : apiUrl.replace(/api(-dev)?\./, "www$1.");
+  const runtimeSiteUrl = siteUrl;
 
   return html
     .replace(/__RUNTIME_SITE_NAME__/g, escapeHtml(siteName))
@@ -505,52 +399,19 @@ app.get(/^\/.*/, async (req, res) => {
           info("[SSR] Loaded pre-rendered homepage HTML template into memory cache");
         }
         
-        // Determine runtime API URL (same logic as other routes)
-        const protocol =
-          req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-        const hostHeader =
-          req.headers["x-forwarded-host"] ||
-          req.headers["host"] ||
-          "localhost:3000";
-        const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-        let runtimeApiUrl;
+        const runtimeApiUrl = publicApiUrl(config) || requestOrigin(req);
 
-        // Check if accessing via IP address (e.g., 192.168.1.219:3000)
-        const ipPattern = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
-        if (ipPattern.test(host)) {
-          // Direct IP access: use same IP with port 3001
-          const ipAddress = host.split(":")[0];
-          runtimeApiUrl = `${protocol}://${ipAddress}:3001`;
-        } else if (host.includes("localhost")) {
-          // Localhost development - use BACKEND_DOMAIN if set (for Docker port mapping)
-          runtimeApiUrl = process.env.BACKEND_DOMAIN || "http://localhost:3001";
-        } else if (host.startsWith("www-")) {
-          // Domain with www- prefix (e.g., www-dev.example.com -> api-dev.example.com)
-          runtimeApiUrl = `${protocol}://api-${host.substring(4)}`;
-        } else if (host.startsWith("www.")) {
-          // Domain with www. prefix (e.g., www.example.com -> api.example.com)
-          runtimeApiUrl = `${protocol}://api.${host.substring(4)}`;
-        } else if (process.env.BACKEND_DOMAIN) {
-          // Fall back to environment variable if provided
-          runtimeApiUrl = process.env.BACKEND_DOMAIN;
-        } else if (
-          !isSetupMode &&
-          config.frontend.apiUrl &&
-          !config.frontend.apiUrl.includes("localhost")
-        ) {
-          // Use config file value if available
-          runtimeApiUrl = config.frontend.apiUrl;
-        } else {
-          // Final fallback: derive from host
-          runtimeApiUrl = `${protocol}://api.${host}`;
-        }
-        
         // Replace placeholder API URL with runtime-detected one
-        const html = htmlTemplate.replace(
+        let html = htmlTemplate
+          .replaceAll('__GALLERIA_API_ORIGIN__', escapeHtml(runtimeApiUrl))
+          .replaceAll('__GALLERIA_SITE_ORIGIN__', escapeHtml(publicSiteUrl(config, process.env, requestOrigin(req))))
+          .replace(
           /"http:\/\/localhost:3001"/g,
           `"${runtimeApiUrl}"`
         );
         
+        html = html.replace(/window\.__RUNTIME_API_URL__ = "[^"]*";/g, `window.__RUNTIME_API_URL__ = ${JSON.stringify(runtimeApiUrl)};`);
+
         // Set CSP and other security headers
         setCSPHeader(res, runtimeApiUrl, configFile);
         
@@ -583,8 +444,8 @@ app.get(/^\/.*/, async (req, res) => {
 
     try {
       // Fetch shared album data from backend
-      const apiUrl = config.frontend.apiUrl;
-      const response = await fetch(`${apiUrl}/api/shared/${secretKey}`, {
+      const apiUrl = publicApiUrl(config) || requestOrigin(req);
+      const response = await fetch(`${backendTarget}/api/shared/${secretKey}`, {
         headers: {
           'X-Meta-Injection': 'true' // Indicate this is for meta tag injection only
         }
@@ -604,12 +465,7 @@ app.get(/^\/.*/, async (req, res) => {
             albumName.charAt(0).toUpperCase() + albumName.slice(1);
 
           // Build URLs
-          let siteUrl;
-          if (apiUrl.includes("localhost")) {
-            siteUrl = apiUrl.replace(":3001", ":3000");
-          } else {
-            siteUrl = apiUrl.replace(/api(-dev)?\./, "www$1.");
-          }
+          const siteUrl = publicSiteUrl(config, process.env, requestOrigin(req));
 
           // Use 2x2 grid preview image
           const gridUrl = `${apiUrl}/api/preview-grid/shared/${secretKey}`;
@@ -753,23 +609,18 @@ app.get(/^\/.*/, async (req, res) => {
   // Handle album page (without specific photo)
   if (albumMatch && !photoParam) {
     const albumName = albumMatch[1];
-    const apiUrl = config.frontend.apiUrl;
+    const apiUrl = publicApiUrl(config) || requestOrigin(req);
 
     try {
       // Fetch album data to get photo count
-      const response = await fetch(`${apiUrl}/api/albums/${albumName}/photos`);
+      const response = await fetch(`${backendTarget}/api/albums/${albumName}/photos`);
 
       if (response.ok) {
         const photos = await response.json();
 
         if (photos.length > 0) {
           // Derive site URL
-          let siteUrl;
-          if (apiUrl.includes("localhost")) {
-            siteUrl = apiUrl.replace(":3001", ":3000");
-          } else {
-            siteUrl = apiUrl.replace(/api(-dev)?\./, "www$1.");
-          }
+          const siteUrl = publicSiteUrl(config, process.env, requestOrigin(req));
 
           // Use 2x2 grid preview image
           const gridUrl = `${apiUrl}/api/preview-grid/album/${albumName}`;
@@ -920,11 +771,11 @@ app.get(/^\/.*/, async (req, res) => {
   if (albumMatch && photoParam) {
     const albumName = albumMatch[1];
     const photoFilename = photoParam;
-    const apiUrl = config.frontend.apiUrl;
+    const apiUrl = publicApiUrl(config) || requestOrigin(req);
 
     try {
       // Fetch album photos to get the actual image title from database
-      const response = await fetch(`${apiUrl}/api/albums/${albumName}/photos`);
+      const response = await fetch(`${backendTarget}/api/albums/${albumName}/photos`);
 
       if (response.ok) {
         const photos = await response.json();
@@ -943,13 +794,7 @@ app.get(/^\/.*/, async (req, res) => {
           // Production: https://api.example.com -> https://www.example.com
           // Development: http://localhost:3001 -> http://localhost:3000
           // Dev server: https://api-dev.example.com -> https://www-dev.example.com
-          let siteUrl;
-          if (apiUrl.includes("localhost")) {
-            siteUrl = apiUrl.replace(":3001", ":3000");
-          } else {
-            // Handle both api. and api-dev. patterns
-            siteUrl = apiUrl.replace(/api(-dev)?\./, "www$1.");
-          }
+          const siteUrl = publicSiteUrl(config, process.env, requestOrigin(req));
 
           // Ensure thumbnail URL uses HTTPS for production
           // Use full URL with protocol for social media crawlers
@@ -1117,46 +962,7 @@ app.get(/^\/.*/, async (req, res) => {
       return res.sendFile(indexPath);
     }
 
-    // Determine runtime API URL
-    // Always auto-detect from request headers first (supports both IP and domain access)
-    const protocol =
-      req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-    const hostHeader =
-      req.headers["x-forwarded-host"] ||
-      req.headers["host"] ||
-      "localhost:3000";
-    const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-    let runtimeApiUrl;
-
-    // Check if accessing via IP address (e.g., 192.168.1.219:3000)
-    const ipPattern = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
-    if (ipPattern.test(host)) {
-      // Direct IP access: use same IP with port 3001
-      const ipAddress = host.split(":")[0];
-      runtimeApiUrl = `${protocol}://${ipAddress}:3001`;
-    } else if (host.includes("localhost")) {
-      // Localhost development - use BACKEND_DOMAIN if set (for Docker port mapping)
-      runtimeApiUrl = process.env.BACKEND_DOMAIN || "http://localhost:3001";
-    } else if (host.startsWith("www-")) {
-      // Domain with www- prefix (e.g., www-dev.example.com -> api-dev.example.com)
-      runtimeApiUrl = `${protocol}://api-${host.substring(4)}`;
-    } else if (host.startsWith("www.")) {
-      // Domain with www. prefix (e.g., www.example.com -> api.example.com)
-      runtimeApiUrl = `${protocol}://api.${host.substring(4)}`;
-    } else if (process.env.BACKEND_DOMAIN) {
-      // Fall back to environment variable if provided
-      runtimeApiUrl = process.env.BACKEND_DOMAIN;
-    } else if (
-      !isSetupMode &&
-      config.frontend.apiUrl &&
-      !config.frontend.apiUrl.includes("localhost")
-    ) {
-      // Use config file value if available
-      runtimeApiUrl = config.frontend.apiUrl;
-    } else {
-      // Final fallback: derive from host
-      runtimeApiUrl = `${protocol}://api.${host}`;
-    }
+    const runtimeApiUrl = publicApiUrl(config) || requestOrigin(req);
 
     // Set Content Security Policy with runtime API URL
     setCSPHeader(res, runtimeApiUrl, configFile);

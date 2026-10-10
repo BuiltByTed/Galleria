@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import type { User } from "./types";
-import { getGravatarUrl, copyInvitationUrl } from "./utils";
+import { getGravatarUrl, userManagementAPI } from "./utils";
 import { error, info } from '../../../../../utils/logger';
 
 interface UserCardProps {
@@ -46,10 +46,9 @@ export const UserCard: React.FC<UserCardProps> = ({
   }
 
   const handleCopyInvite = async () => {
-    if (!user.invite_token) return;
-    
     try {
-      await copyInvitationUrl(user.invite_token);
+      const { inviteUrl } = await userManagementAPI.getInviteLink(user.id);
+      await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -454,7 +453,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       {currentUser && (
         <>
           {/* Invited/Expired Users - Show Copy Invite */}
-          {(user.status === "invited" || user.status === "invite_expired") && user.invite_token && (
+          {(user.status === "invited" || user.status === "invite_expired") && (
             <div
               style={{
                 display: "flex",

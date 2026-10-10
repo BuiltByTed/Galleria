@@ -18,7 +18,7 @@ docker pull tedcharles/galleria:latest
 docker pull tedcharles/galleria:dev
 
 # Pull specific version
-docker pull tedcharles/galleria:v1.0.1
+docker pull tedcharles/galleria:v1.2.0
 ```
 
 **Quick Start with Docker Hub image:**
@@ -31,13 +31,45 @@ mkdir -p ~/galleria-data
 docker run -d \
   --name galleria \
   -p 3000:3000 \
-  -p 3001:3001 \
   -v ~/galleria-data:/data \
   -e DATA_DIR=/data \
-  -e FRONTEND_DOMAIN=http://localhost:3000 \
-  -e BACKEND_DOMAIN=http://localhost:3001 \
   tedcharles/galleria:latest
 ```
+
+Open `http://YOUR-SERVER-IP:3000` and create a username and password. No email address, DNS setup, or second exposed port is required. Email is requested only when you choose Google sign-in. Local accounts can use MFA and passkeys; email password recovery requires an email-based account.
+
+For Nginx Proxy Manager, create one proxy host pointing to your server's WebUI port, using HTTP upstream, and enable SSL. No custom API location is needed. For plain nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name photos.example.com;
+    # Configure your ssl_certificate and ssl_certificate_key here.
+    client_max_body_size 0;
+    location / {
+        proxy_pass http://YOUR-SERVER-IP:3000;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+`DOMAIN=https://photos.example.com` is optional. Leaving it blank uses your browser's origin. If your public hostname changes after setup, set `DOMAIN` to update generated links and Google/passkey origins.
+
+**Upgrading existing Unraid/Docker installations:** keep your current volumes, port mappings, and environment variables. `/app/data` remains the default for existing Unraid templates; installations using `DATA_DIR=/data` remain supported. Existing email/password accounts keep their logins and data. `FRONTEND_DOMAIN`, `BACKEND_DOMAIN`, `API_URL`, `ALLOWED_ORIGINS`, and saved split-domain API URLs remain supported. To intentionally switch an existing split-domain installation to one domain, remove `BACKEND_DOMAIN`/`API_URL`, set `DOMAIN` to the public URL, and point the reverse proxy to port 3000. Update your Google OAuth redirect URI if you use Google sign-in.
+
+| Variable | Default / purpose |
+| --- | --- |
+| `DOMAIN` | Optional public URL; blank for automatic same-origin access |
+| `FRONTEND_DOMAIN` | Legacy frontend URL override |
+| `BACKEND_DOMAIN` / `API_URL` | Legacy public API URL; explicit values preserve split-domain access |
+| `BACKEND_INTERNAL_URL` | Internal proxy target; defaults to `http://127.0.0.1:3001` |
+| `DATA_DIR` | `/app/data` in Docker unless explicitly set, e.g. `/data` |
+| `ALLOWED_ORIGINS` | Optional additional allowed browser origins |
 
 **Available tags:**
 
@@ -51,7 +83,7 @@ docker run -d \
 
 ### Prerequisites
 
-- **Node.js** 18+ (for development)
+- **Node.js** 22+ (for development)
 - **Docker & Docker Compose** (for Docker deployment)
 - **Google OAuth credentials** (optional - password-based authentication works without it)
 
@@ -81,8 +113,7 @@ mkdir -p ~/galleria-data
 ```yaml
 environment:
   - DATA_DIR=/data
-  - FRONTEND_DOMAIN=http://localhost:3000 # or https://www.yourdomain.com
-  - BACKEND_DOMAIN=http://localhost:3001 # or https://api.yourdomain.com
+  - DOMAIN= # Optional, e.g. https://photos.yourdomain.com
 volumes:
   - ~/galleria-data:/data
 ```
@@ -221,8 +252,7 @@ Configure via environment variables in `docker-compose.yml`:
 ```yaml
 environment:
   - DATA_DIR=/data
-  - FRONTEND_DOMAIN=http://localhost:3000 # or https://www.yourdomain.com
-  - BACKEND_DOMAIN=http://localhost:3001 # or https://api.yourdomain.com
+  - DOMAIN= # Optional, e.g. https://photos.yourdomain.com
 ```
 
 ### Non-Docker Deployment
@@ -235,8 +265,7 @@ environment:
 
 2. **Edit `.env` with your settings:**
    ```bash
-   FRONTEND_DOMAIN=http://localhost:3000
-   BACKEND_DOMAIN=http://localhost:3001
+   DOMAIN= # Optional public URL
    DATA_DIR=./data
    ```
 
@@ -251,8 +280,9 @@ Google OAuth is completely optional. You can use password-based authentication w
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
 2. Create OAuth 2.0 credentials
 3. Add authorized redirect URIs:
-   - Development: `http://localhost:3001/api/auth/google/callback`
-   - Production: `https://api.yourdomain.com/api/auth/google/callback`
+   - Single-domain: `https://photos.yourdomain.com/api/auth/google/callback`
+   - Local: `http://localhost:3000/api/auth/google/callback`
+   - Existing split-domain: keep your backend URL, e.g. `https://api.yourdomain.com/api/auth/google/callback`
 4. Configure OAuth credentials in Admin Panel → Settings → Advanced Settings → Authentication
 
 ---

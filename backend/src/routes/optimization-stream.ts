@@ -109,13 +109,27 @@ async function processQueue() {
 
     activeJobs.add(childProcess);
 
-    // Add timeout to prevent hung processes (5 minutes)
-    const timeout = setTimeout(() => {
-      error(`[OptimizationStream] Job ${job.jobId} timed out after 5 minutes, killing process`);
-      childProcess.kill('SIGTERM');
+    // Only one terminal path may call onError/onComplete + processQueue.
+    // Timeout kill still emits `close`; without this flag both paths double-fire.
+    let finished = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finishJob = (handler: () => void) => {
+      if (finished) return;
+      finished = true;
+      if (timeout !== undefined) clearTimeout(timeout);
       activeJobs.delete(childProcess);
-      job.onError('Optimization timed out');
+      handler();
       processQueue();
+    };
+
+    // Add timeout to prevent hung processes (5 minutes)
+    timeout = setTimeout(() => {
+      error(`[OptimizationStream] Job ${job.jobId} timed out after 5 minutes, killing process`);
+      // Kill first so the process begins exiting; finishJob guards the subsequent close.
+      childProcess.kill('SIGTERM');
+      finishJob(() => {
+        job.onError('Optimization timed out');
+      });
     }, 5 * 60 * 1000);
 
     // Handle stdout for progress updates
@@ -140,28 +154,23 @@ async function processQueue() {
 
     // Handle completion
     childProcess.on('close', (code) => {
-      clearTimeout(timeout);
-      activeJobs.delete(childProcess);
-
-      if (code === 0) {
-        job.onComplete();
-        // info(`[OptimizationStream] Completed ${job.jobId} (${activeJobs.size}/${MAX_CONCURRENT_JOBS} active, ${optimizationQueue.length} queued)`);
-      } else {
-        job.onError(`Optimization failed with code ${code}`);
-        error(`[OptimizationStream] Failed ${job.jobId} with code ${code} (${activeJobs.size}/${MAX_CONCURRENT_JOBS} active, ${optimizationQueue.length} queued)`);
-      }
-
-      // Process next job in queue
-      processQueue();
+      finishJob(() => {
+        if (code === 0) {
+          job.onComplete();
+          // info(`[OptimizationStream] Completed ${job.jobId} (${activeJobs.size}/${MAX_CONCURRENT_JOBS} active, ${optimizationQueue.length} queued)`);
+        } else {
+          job.onError(`Optimization failed with code ${code}`);
+          error(`[OptimizationStream] Failed ${job.jobId} with code ${code} (${activeJobs.size}/${MAX_CONCURRENT_JOBS} active, ${optimizationQueue.length} queued)`);
+        }
+      });
     });
 
     // Handle errors
     childProcess.on('error', (err) => {
-      clearTimeout(timeout);
-      activeJobs.delete(childProcess);
-      error(`[OptimizationStream] Error in job ${job.jobId}:`, err);
-      job.onError(err.message);
-      processQueue();
+      finishJob(() => {
+        error(`[OptimizationStream] Error in job ${job.jobId}:`, err);
+        job.onError(err.message);
+      });
     });
   }
 }

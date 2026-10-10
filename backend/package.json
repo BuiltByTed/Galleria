@@ -7,7 +7,7 @@
     "start": "node --no-warnings --loader ts-node/esm src/server.ts",
     "dev": "nodemon --exec 'node --no-warnings --loader ts-node/esm' src/server.ts",
     "build": "tsc",
-    "test": "TS_NODE_PROJECT=tsconfig.json TS_NODE_TRANSPILE_ONLY=true node --test --loader ts-node/esm src/utils/album-access.test.ts"
+    "test": "TS_NODE_PROJECT=tsconfig.json TS_NODE_TRANSPILE_ONLY=true node --experimental-test-module-mocks --test --loader ts-node/esm src/utils/origins-equal.test.ts src/utils/album-access.test.ts src/auth/session-invalidation.test.ts src/auth/reauth.test.ts src/auth/passkeys-auth-options.test.ts src/utils/session-user.test.ts src/utils/rename-rollback.test.ts src/utils/video-processor.spawn-error.test.ts src/utils/media-disk-cleanup.test.ts src/utils/folder-album-deletion.test.ts src/utils/move-media-disk.test.ts src/utils/publish-upload.test.ts src/config.origin-allowed.test.ts src/utils/config-secrets.test.ts src/utils/stream-file-response.test.ts src/utils/session-cookie-domain.test.ts src/services/share-link-expiry-tracker.test.ts src/utils/analytics-timestamp.test.ts src/routes/photo-retry-contract.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +43,7 @@
     "passport-google-oauth20": "^2.0.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
+    "tldts": "^7.4.9",
     "typescript": "^5.8.3",
     "web-push": "^3.6.7"
   },

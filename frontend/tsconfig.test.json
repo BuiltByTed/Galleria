@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/utils/metricsHelpers.ts", "tests/**/*.test.ts"]
+}

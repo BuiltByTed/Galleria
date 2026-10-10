@@ -1,5 +1,6 @@
 // PM2 ecosystem config for Docker
 // Used by start-docker.sh in Docker container
+const dataDir = process.env.DATA_DIR || '/app/data';
 module.exports = {
   apps: [
     {
@@ -16,8 +17,8 @@ module.exports = {
         // PM2 will inherit environment variables from docker-compose.yml
         // DATA_DIR, FRONTEND_DOMAIN, BACKEND_DOMAIN, ALLOWED_ORIGINS
       },
-      error_file: '/data/logs/backend-error.log',
-      out_file: '/data/logs/backend-out.log',
+      error_file: `${dataDir}/logs/backend-error.log`,
+      out_file: `${dataDir}/logs/backend-out.log`,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: false,
       combine_logs: false,
@@ -39,8 +40,8 @@ module.exports = {
         // PM2 will inherit environment variables from docker-compose.yml
         // DATA_DIR, API_URL, BACKEND_DOMAIN
       },
-      error_file: '/data/logs/frontend-error.log',
-      out_file: '/data/logs/frontend-out.log',
+      error_file: `${dataDir}/logs/frontend-error.log`,
+      out_file: `${dataDir}/logs/frontend-out.log`,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,

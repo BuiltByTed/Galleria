@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Ημερομηνία Λήψης",
     "resolution": "Ανάλυση",
-    "duration": "Διάρκεια"
+    "duration": "Διάρκεια",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Ανάλυση",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Εμφάνιση αυτού του άλμπουμ στη δημόσια συλλογή.",
     "folderControlsPublished": "Αυτό το άλμπουμ κληρονομεί την κατάσταση δημοσίευσης από τον φάκελό του.",
     "homepageVisibilityDescription": "Συμπερίληψη των φωτογραφιών αυτού του άλμπουμ στην αρχική σελίδα.",
-    "downloadsVisibilityDescription": "Επιτρέψτε στους επισκέπτες να κατεβάσουν βελτιστοποιημένες φωτογραφίες πλήρους μεγέθους από αυτό το άλμπουμ."
+    "downloadsVisibilityDescription": "Επιτρέψτε στους επισκέπτες να κατεβάσουν βελτιστοποιημένες φωτογραφίες πλήρους μεγέθους από αυτό το άλμπουμ.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Οι ρυθμίσεις του {{section}} αποθηκεύτηκαν!",
@@ -1005,7 +1016,20 @@
     "custom": "Προσαρμοσμένο...",
     "generate": "Δημιουργία",
     "invalidCustomTime": "Παρακαλώ εισάγετε έναν έγκυρο αριθμό λεπτών",
-    "copied": "✓ Αντιγράφηκε!"
+    "copied": "✓ Αντιγράφηκε!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Κοινοποίηση Βίντεο",

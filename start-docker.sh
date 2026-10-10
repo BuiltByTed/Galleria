@@ -4,15 +4,18 @@ set -e
 # Use PM2 to manage processes in Docker
 cd /app
 
+# Preserve the original Unraid /app/data mount and explicit /data deployments.
+export DATA_DIR="${DATA_DIR:-/app/data}"
+
 # Ensure data directory structure exists
 echo "Ensuring data directory structure..."
-mkdir -p /data/photos
-mkdir -p /data/optimized
-mkdir -p /data/logs
+mkdir -p "$DATA_DIR/photos"
+mkdir -p "$DATA_DIR/optimized"
+mkdir -p "$DATA_DIR/logs"
 echo "✓ Data directories ready"
 
 # Download GeoIP database if it doesn't exist (for failed login location tracking)
-if [ ! -f "/data/GeoLite2-City.mmdb" ]; then
+if [ ! -f "$DATA_DIR/GeoLite2-City.mmdb" ]; then
     echo "Downloading GeoIP database for location lookup..."
     
     # Get current year and month
@@ -21,7 +24,7 @@ if [ ! -f "/data/GeoLite2-City.mmdb" ]; then
     GEOIP_URL="https://download.db-ip.com/free/dbip-city-lite-${YEAR}-${MONTH}.mmdb.gz"
     
     # Download and extract
-    if wget -qO- "$GEOIP_URL" | gunzip > /data/GeoLite2-City.mmdb 2>/dev/null; then
+    if wget -T 15 -t 1 -qO- "$GEOIP_URL" | gunzip > "$DATA_DIR/GeoLite2-City.mmdb" 2>/dev/null; then
         echo "✓ GeoIP database downloaded successfully"
     else
         echo "⚠ Failed to download GeoIP database. Location lookup will be disabled."
@@ -35,7 +38,7 @@ fi
 # Generate pre-rendered homepage HTML if config and database exist
 # Environment variables from docker-compose.yml (BACKEND_DOMAIN, FRONTEND_DOMAIN) 
 # are automatically available in the container
-if [ -f "/data/config.json" ] && [ -f "/data/gallery.db" ]; then
+if [ -f "$DATA_DIR/config.json" ] && [ -f "$DATA_DIR/gallery.db" ]; then
     echo "Generating pre-rendered homepage HTML..."
     if node scripts/generate-homepage-html.js; then
         echo "✓ Homepage HTML generated successfully"
@@ -55,7 +58,7 @@ else
 fi
 
 # Generate static JSON files if config exists
-if [ -f "/data/config.json" ]; then
+if [ -f "$DATA_DIR/config.json" ]; then
     echo "Generating static JSON files..."
     if node scripts/generate-static-json.js; then
         echo "✓ Static JSON generated successfully"

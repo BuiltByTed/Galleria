@@ -70,6 +70,17 @@ export const userManagementAPI = {
     return data.users || [];
   },
 
+  async getInviteLink(userId: number): Promise<{ inviteUrl: string }> {
+    const res = await fetch(`${API_URL}/api/auth-extended/users/${userId}/invite-link`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to get invitation link');
+    }
+    return await res.json();
+  },
+
   async checkSmtpConfig() {
     const res = await fetch(`${API_URL}/api/config`, {
       credentials: 'include',

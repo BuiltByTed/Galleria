@@ -63,7 +63,6 @@ function getBaseEventData(): Partial<AnalyticsEvent> {
   const timestamp = new Date().toISOString();
   return {
     timestamp,
-    _timestamp: Date.now() * 1000000, // OpenObserve expects nanoseconds for timestamp override
     page_url: window.location.href,
     page_path: window.location.pathname,
     referrer: document.referrer || 'direct',
@@ -362,6 +361,24 @@ export function trackPhotoDeleted(album: string, photoId: string, photoTitle: st
   sendEvent({
     event_type: 'photo_deleted',
     album: album,
+    photo_id: photoId,
+    photo_title: photoTitle,
+  });
+}
+
+/**
+ * Track photo/video moved to another album
+ */
+export function trackPhotoMoved(
+  sourceAlbum: string,
+  destinationAlbum: string,
+  photoId: string,
+  photoTitle: string
+) {
+  sendEvent({
+    event_type: 'photo_moved',
+    album: sourceAlbum,
+    destination_album: destinationAlbum,
     photo_id: photoId,
     photo_title: photoTitle,
   });
@@ -794,4 +811,3 @@ export function trackVideoSession(videoId: string, album: string, videoTitle: st
     engagement_rate: totalWatchTime > 0 ? Math.round((totalWatchTime / duration) * 100) : 0,
   });
 }
-

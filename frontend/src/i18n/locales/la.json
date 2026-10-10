@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Dies Capta",
     "resolution": "Resolutio",
-    "duration": "Tempus"
+    "duration": "Tempus",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Resolutio",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Ostende hoc album in galeria publica.",
     "folderControlsPublished": "Hoc album statum editum a sua folder accipit.",
     "homepageVisibilityDescription": "Include huius album imagines in pagina domestica.",
-    "downloadsVisibilityDescription": "Permitte visitatores ad plenas magnitudines optimizatas imagines ex hoc album detrahere."
+    "downloadsVisibilityDescription": "Permitte visitatores ad plenas magnitudines optimizatas imagines ex hoc album detrahere.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} configurationes servatae!",
@@ -1005,7 +1016,20 @@
     "custom": "Custom...",
     "generate": "Generare",
     "invalidCustomTime": "Quaeso numerum minutorum validum insere",
-    "copied": "✓ Exemplar!"
+    "copied": "✓ Exemplar!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Communicare Video",

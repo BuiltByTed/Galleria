@@ -372,6 +372,76 @@ export function deleteImageMetadata(album: string, filename: string): boolean {
 }
 
 /**
+ * Move image metadata from one album to another (keeps title/description/media_type).
+ * Assigns sort_order at the end of the destination album when not provided.
+ * Returns false if source row missing or destination already has the filename.
+ */
+export function moveImageMetadata(
+  fromAlbum: string,
+  toAlbum: string,
+  filename: string,
+  sortOrder?: number
+): boolean {
+  const db = getDatabase();
+
+  try {
+    const transaction = db.transaction(() => {
+      const destExists = db
+        .prepare(
+          "SELECT id FROM image_metadata WHERE album = ? AND filename = ?"
+        )
+        .get(toAlbum, filename);
+      if (destExists) {
+        throw new Error("DESTINATION_EXISTS");
+      }
+
+      const source = db
+        .prepare(
+          "SELECT id FROM image_metadata WHERE album = ? AND filename = ?"
+        )
+        .get(fromAlbum, filename) as { id: number } | undefined;
+      if (!source) {
+        throw new Error("SOURCE_MISSING");
+      }
+
+      let nextSort = sortOrder;
+      if (nextSort === undefined || nextSort === null) {
+        const maxRow = db
+          .prepare(
+            "SELECT MAX(sort_order) as max_sort FROM image_metadata WHERE album = ?"
+          )
+          .get(toAlbum) as { max_sort: number | null };
+        nextSort =
+          maxRow?.max_sort !== null && maxRow?.max_sort !== undefined
+            ? maxRow.max_sort + 1
+            : 0;
+      }
+
+      const result = db
+        .prepare(
+          `UPDATE image_metadata
+           SET album = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE album = ? AND filename = ?`
+        )
+        .run(toAlbum, nextSort, fromAlbum, filename);
+
+      if (result.changes === 0) {
+        throw new Error("SOURCE_MISSING");
+      }
+    });
+
+    transaction();
+    return true;
+  } catch (err: any) {
+    if (err?.message === "DESTINATION_EXISTS" || err?.message === "SOURCE_MISSING") {
+      return false;
+    }
+    error("[Database] Failed to move image metadata:", err);
+    return false;
+  }
+}
+
+/**
  * Delete all image metadata for an album
  */
 export function deleteAlbumMetadata(album: string): number {

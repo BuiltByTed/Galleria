@@ -46,9 +46,18 @@ import { DATA_DIR, reloadConfig } from '../config.js';
 import { requireAuth, requireAdmin, requireManager } from '../auth/middleware.js';
 import { sendNotificationToUser } from '../push-notifications.js';
 import { translateNotification } from '../i18n-backend.js';
+import { broadcastOptimizationUpdate, queueOptimizationJob } from './optimization-stream.js';
 
 // Path to config.json
 const configPath = path.join(DATA_DIR, 'config.json');
+
+function isSafePathSegment(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length > 0
+    && !value.includes('..')
+    && !value.includes('/')
+    && !value.includes('\\');
+}
 
 // GET /api/image-optimization/settings - Get current optimization settings
 router.get('/settings', requireAuth, (req, res) => {
@@ -142,6 +151,66 @@ router.get('/status', requireAuth, (req, res) => {
   } else {
     res.json({ running: false });
   }
+});
+
+// POST /api/image-optimization/retry-photo - Retry optimization for one photo
+router.post('/retry-photo', requireManager, (req, res) => {
+  const { album, filename } = req.body;
+
+  if (!isSafePathSegment(album) || !isSafePathSegment(filename)) {
+    res.status(400).json({ error: 'Valid album and filename are required' });
+    return;
+  }
+
+  const sourcePath = path.join(DATA_DIR, 'photos', album, filename);
+  if (!fs.existsSync(sourcePath)) {
+    res.status(404).json({ error: 'Photo not found' });
+    return;
+  }
+
+  const projectRoot = path.resolve(__dirname, '../../../');
+  const scriptPath = path.join(projectRoot, 'scripts', 'optimize_new_image.js');
+  if (!fs.existsSync(scriptPath)) {
+    res.status(500).json({ error: 'Optimization script not found' });
+    return;
+  }
+
+  const jobId = `${album}/${filename}`;
+  queueOptimizationJob(
+    jobId,
+    album,
+    filename,
+    scriptPath,
+    projectRoot,
+    (progress) => {
+      broadcastOptimizationUpdate(jobId, {
+        album,
+        filename,
+        progress,
+        state: 'optimizing'
+      });
+    },
+    () => {
+      broadcastOptimizationUpdate(jobId, {
+        album,
+        filename,
+        progress: 100,
+        state: 'complete'
+      });
+    },
+    (optimizationError) => {
+      broadcastOptimizationUpdate(jobId, {
+        album,
+        filename,
+        progress: 0,
+        state: 'error',
+        error: optimizationError
+      });
+    }
+  );
+
+  info(`[ImageOptimization] Queued photo retry for ${jobId}`);
+  res.status(202).json({ success: true, message: 'Photo optimization queued' });
 });
 
 // POST /api/image-optimization/stop - Stop running optimization job
@@ -403,4 +472,3 @@ router.post('/optimize', requireManager, (req, res) => {
 });
 
 export default router;
-

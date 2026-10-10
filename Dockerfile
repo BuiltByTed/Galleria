@@ -49,6 +49,7 @@ COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY scripts/ ./scripts/
 COPY config/ ./config/
+COPY shared/ ./shared/
 
 # Generate default favicons from config/icons/ (before frontend build)
 # Creates empty data dir so generate-favicons falls back to default icons

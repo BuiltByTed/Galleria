@@ -447,6 +447,13 @@ const AlbumsManager: React.FC<AlbumsManagerProps> = ({
   // Move to Folder modal state
   const [showMoveToFolderModal, setShowMoveToFolderModal] = useState(false);
   const [moveToFolderAlbumName, setMoveToFolderAlbumName] = useState<string | null>(null);
+
+  // Move photo to album modal state
+  const [showMoveToAlbumModal, setShowMoveToAlbumModal] = useState(false);
+  const [movePhotoAlbum, setMovePhotoAlbum] = useState<string | null>(null);
+  const [movePhotoFilename, setMovePhotoFilename] = useState<string | null>(null);
+  const [movePhotoTitle, setMovePhotoTitle] = useState('');
+  const [isMovingPhoto, setIsMovingPhoto] = useState(false);
   
   // Folder deletion modal state
   const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
@@ -557,8 +564,58 @@ const AlbumsManager: React.FC<AlbumsManagerProps> = ({
     shuffleIntervalRef,
     speedupTimeoutsRef,
     setIsShuffling,
+    loadAlbums,
     t,
   });
+
+  const handleOpenMovePhotoModal = (
+    album: string,
+    filename: string,
+    photoTitle: string = '',
+    _thumbnail?: string,
+    _mediaType?: 'photo' | 'video'
+  ) => {
+    setMovePhotoAlbum(album);
+    setMovePhotoFilename(filename);
+    setMovePhotoTitle(photoTitle || '');
+    setShowMoveToAlbumModal(true);
+  };
+
+  const handleOpenMoveFromEdit = () => {
+    if (!editingPhoto) return;
+    const parts = editingPhoto.id.split('/');
+    const filename = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+    handleOpenMovePhotoModal(
+      editingPhoto.album || parts[0],
+      decodeURIComponent(filename),
+      editingPhoto.title || ''
+    );
+  };
+
+  const handleMovePhotoToAlbum = async (destinationAlbum: string) => {
+    if (!movePhotoAlbum || !movePhotoFilename) return;
+    setIsMovingPhoto(true);
+    try {
+      const ok = await photoHandlers.handleMovePhoto(
+        movePhotoAlbum,
+        movePhotoFilename,
+        destinationAlbum,
+        movePhotoTitle
+      );
+      if (ok) {
+        setShowMoveToAlbumModal(false);
+        setMovePhotoAlbum(null);
+        setMovePhotoFilename(null);
+        setMovePhotoTitle('');
+        // Close edit modal if open (photo left this album)
+        if (showEditModal) {
+          closeEditModal();
+        }
+      }
+    } finally {
+      setIsMovingPhoto(false);
+    }
+  };
 
   // Handlers are accessed via namespace pattern (e.g., dragDropHandlers.handlePhotoDragStart)
   // This makes it clearer where each handler comes from
@@ -869,6 +926,7 @@ const AlbumsManager: React.FC<AlbumsManagerProps> = ({
               onPhotoDragEnd={(event, setActiveId) => photoManagement.handlePhotoDragEnd(event, setActiveId)}
               onOpenEditModal={openEditModal}
               onDeletePhoto={photoHandlers.handleDeletePhoto}
+              onMovePhoto={handleOpenMovePhotoModal}
               onRetryOptimization={photoHandlers.handleRetryOptimization}
               onRetryAI={photoHandlers.handleRetryAI}
               onRetryUpload={uploadHandlers.handleRetryUpload}
@@ -890,6 +948,14 @@ const AlbumsManager: React.FC<AlbumsManagerProps> = ({
         setEditDescriptionValue={setEditDescriptionValue}
         handleCloseEditModal={closeEditModal}
         handleSaveTitle={handleEditSave}
+        onOpenMoveFromEdit={handleOpenMoveFromEdit}
+        showMoveToAlbumModal={showMoveToAlbumModal}
+        movePhotoAlbum={movePhotoAlbum}
+        movePhotoFilename={movePhotoFilename}
+        movePhotoTitle={movePhotoTitle}
+        setShowMoveToAlbumModal={setShowMoveToAlbumModal}
+        handleMovePhotoToAlbum={handleMovePhotoToAlbum}
+        isMovingPhoto={isMovingPhoto}
         showRenameModal={showRenameModal}
         renamingAlbum={renamingAlbum}
         newAlbumName={newAlbumName}

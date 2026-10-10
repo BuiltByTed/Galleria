@@ -83,7 +83,7 @@ export default function LoginForm({ availableAuthMethods, onLoginSuccess }: Logi
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          email: username,
+          username,
           password,
           mfaToken: mfaToken || undefined,
         }),
@@ -238,17 +238,17 @@ export default function LoginForm({ availableAuthMethods, onLoginSuccess }: Logi
               <form onSubmit={handleCredentialsLogin} className="auth-form-full">
                 <div className="auth-input-group">
                   <label className="auth-input-label">
-                    {t('login.email')}
+                    {t('login.usernameOrEmail', 'Username or email')}
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     className="auth-input"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
-                    autoComplete="email"
+                    autoComplete="username"
                     disabled={loginLoading}
-                    placeholder={t('login.enterEmail')}
+                    placeholder={t('login.enterUsernameOrEmail', 'Enter your username or email')}
                     autoFocus
                   />
                 </div>
@@ -349,17 +349,17 @@ export default function LoginForm({ availableAuthMethods, onLoginSuccess }: Logi
             <form onSubmit={(e) => { e.preventDefault(); handlePasskeyLogin(); }} className="auth-form-full">
               <div className="auth-input-group">
                 <label className="auth-input-label">
-                  {t('login.email')}
+                  {t('login.usernameOrEmail', 'Username or email')}
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   className="auth-input"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  autoComplete="email webauthn"
+                  autoComplete="username webauthn"
                   disabled={loginLoading}
-                  placeholder={t('login.enterEmail')}
+                  placeholder={t('login.enterUsernameOrEmail', 'Enter your username or email')}
                   autoFocus
                 />
               </div>

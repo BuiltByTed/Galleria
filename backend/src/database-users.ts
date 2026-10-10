@@ -11,6 +11,7 @@ const BCRYPT_ROUNDS = 12;
 
 export interface User {
   id: number;
+  // Legacy column name: stores an email or a local username (no email required).
   email: string;
   password_hash: string | null;
   auth_methods: string[]; // Parsed from JSON

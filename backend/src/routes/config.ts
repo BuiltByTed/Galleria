@@ -4,11 +4,12 @@
  */
 
 import express from "express";
+import { publicApiUrl } from "../../../shared/deployment.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { csrfProtection } from "../security.js";
-import { requireAuth, requireAdmin } from "../auth/middleware.js";
+import { requireAdmin } from "../auth/middleware.js";
 import { error, warn, info, debug, verbose } from '../utils/logger.js';
 import { sendNotificationToUser } from '../push-notifications.js';
 import { translateNotification } from '../i18n-backend.js';
@@ -16,6 +17,10 @@ import { getAllUsers } from '../database-users.js';
 import { DATA_DIR, reloadConfig, getLogLevel } from "../config.js";
 import { sendTestEmail } from "../email.js";
 import { initLogger } from '../utils/logger.js';
+import {
+  maskSensitiveFields,
+  restoreSensitiveFields,
+} from "../utils/config-secrets.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,40 +62,9 @@ const LOGS_DIR = path.join(DATA_DIR, "logs");
  */
 router.get("/runtime", (req, res) => {
   try {
-    // Check if config exists
     const configExists = fs.existsSync(CONFIG_PATH);
-    
-    if (configExists) {
-      // Return API URL from config
-      const configData = fs.readFileSync(CONFIG_PATH, "utf8");
-      const config = JSON.parse(configData);
-      res.json({
-        apiUrl: config.environment.frontend.apiUrl,
-        configExists: true
-      });
-    } else {
-      // OOBE mode - auto-detect API URL from request
-      const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
-      const hostHeader = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
-      const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-      
-      // Determine API URL based on convention
-      let apiUrl;
-      if (host.includes('localhost')) {
-        apiUrl = 'http://localhost:3001';
-      } else if (host.startsWith('www.')) {
-        // www.example.com -> api.example.com
-        apiUrl = `${protocol}://api.${host.substring(4)}`;
-      } else {
-        // example.com -> api.example.com
-        apiUrl = `${protocol}://api.${host}`;
-      }
-      
-      res.json({
-        apiUrl,
-        configExists: false
-      });
-    }
+    const environment = configExists ? JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")).environment : {};
+    res.json({ apiUrl: publicApiUrl(environment), configExists });
   } catch (err) {
     error("[Config] Failed to read runtime config:", err);
     res.status(500).json({ error: "Failed to read runtime configuration" });
@@ -102,16 +76,14 @@ router.use(csrfProtection);
 
 /**
  * GET /api/config
- * Get current configuration (excluding sensitive fields)
+ * Admin only. Sensitive secrets are masked (not returned in cleartext).
  */
-router.get("/", requireAuth, (req, res) => {
+router.get("/", requireAdmin, (req, res) => {
   try {
     const configData = fs.readFileSync(CONFIG_PATH, "utf8");
     const config = JSON.parse(configData);
 
-    // Return full config for admin to edit
-    // (sensitive fields will be masked on frontend if needed)
-    res.json(config);
+    res.json(maskSensitiveFields(config));
   } catch (err) {
     error("[Config] Failed to read config:", err);
     res.status(500).json({ error: "Failed to read configuration" });
@@ -185,6 +157,9 @@ router.put("/", requireAdmin, express.json(), async (req, res) => {
       ...currentConfig,
       ...newConfig,
     };
+
+    // Do not wipe secrets when the client re-sends mask tokens from GET
+    restoreSensitiveFields(updatedConfig, currentConfig);
 
     // Write updated config back to file
     fs.writeFileSync(

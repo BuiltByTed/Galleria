@@ -25,6 +25,17 @@ export const formatDateFromMicroseconds = (timestamp: number): string => {
 };
 
 /**
+ * Format a Date as a local calendar date without converting it to UTC.
+ */
+export const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+/**
  * Format duration in milliseconds to HH:MM:SS format (for detailed metrics)
  */
 export const formatDurationDetailed = (ms: number): string => {
@@ -40,4 +51,3 @@ export const formatDurationDetailed = (ms: number): string => {
   
   return `${hh}:${mm}:${ss}`;
 };
-

@@ -31,6 +31,7 @@ interface AlbumContentPanelGridProps {
   onPhotoDragEnd: (event: any, setActiveId?: (id: string | null) => void) => void;
   onOpenEditModal: (photo: Photo) => void;
   onDeletePhoto: (album: string, filename: string, photoTitle?: string, thumbnail?: string, mediaType?: 'photo' | 'video') => void;
+  onMovePhoto?: (album: string, filename: string, photoTitle?: string, thumbnail?: string, mediaType?: 'photo' | 'video') => void;
   onRetryOptimization?: (album: string, filename: string) => void;
   onRetryAI?: (album: string, filename: string) => void;
   onRetryUpload?: (filename: string, albumName: string) => void;
@@ -51,6 +52,7 @@ const AlbumContentPanelGrid: React.FC<AlbumContentPanelGridProps> = ({
   onPhotoDragEnd,
   onOpenEditModal,
   onDeletePhoto,
+  onMovePhoto,
   onRetryOptimization,
   onRetryAI,
   onRetryUpload,
@@ -249,6 +251,7 @@ const AlbumContentPanelGrid: React.FC<AlbumContentPanelGridProps> = ({
                   uploadingIndex={index}
                   onEdit={onOpenEditModal}
                   onDelete={onDeletePhoto}
+                  onMove={onMovePhoto}
                   onRetryOptimization={onRetryOptimization}
                   onRetryAI={onRetryAI}
                   onRetryUpload={onRetryUpload}
@@ -267,6 +270,7 @@ const AlbumContentPanelGrid: React.FC<AlbumContentPanelGridProps> = ({
                   photo={photo}
                   onEdit={onOpenEditModal}
                   onDelete={onDeletePhoto}
+                  onMove={onMovePhoto}
                   onRetryOptimization={onRetryOptimization}
                   onRetryAI={onRetryAI}
                   deletingPhotoId={deletingPhotoId}
@@ -288,6 +292,7 @@ const AlbumContentPanelGrid: React.FC<AlbumContentPanelGridProps> = ({
                   uploadingIndex={index}
                   onEdit={onOpenEditModal}
                   onDelete={onDeletePhoto}
+                  onMove={onMovePhoto}
                   deletingPhotoId={deletingPhotoId}
                   canEdit={canEdit && !hasActiveUploads}
                 />
@@ -300,6 +305,7 @@ const AlbumContentPanelGrid: React.FC<AlbumContentPanelGridProps> = ({
                   photo={photo}
                   onEdit={onOpenEditModal}
                   onDelete={onDeletePhoto}
+                  onMove={onMovePhoto}
                   deletingPhotoId={deletingPhotoId}
                   canEdit={canEdit && !hasActiveUploads}
                 />

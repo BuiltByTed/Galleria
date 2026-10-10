@@ -3,7 +3,7 @@
  * Registers and manages the service worker for caching
  */
 
-import { info } from '../utils/logger';
+import { info, error as logError } from '../utils/logger';
 
 export function registerServiceWorker() {
   // Disable service worker on localhost (development)
@@ -74,7 +74,7 @@ export function registerServiceWorker() {
           });
         })
         .catch((error) => {
-          error("Service Worker registration failed:", error);
+          logError("Service Worker registration failed:", error);
         });
 
       // Listen for messages from the service worker
@@ -94,7 +94,7 @@ export function unregisterServiceWorker() {
         registration.unregister();
       })
       .catch((error) => {
-        error("Service Worker unregistration failed:", error);
+        logError("Service Worker unregistration failed:", error);
       });
   }
 }

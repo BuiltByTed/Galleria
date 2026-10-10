@@ -50,6 +50,85 @@ const PasswordResetComplete = lazy(
 const LogViewer = lazy(() => import("./components/LogViewer/LogViewer"));
 const VideoPage = lazy(() => import("./components/VideoPage"));
 
+interface AlbumBootstrapData {
+  albums?: Array<{
+    name: string;
+    published: boolean | number;
+    folder_id?: number | null;
+  }>;
+  folders?: Array<{
+    id: number;
+    name: string;
+    published: boolean | number;
+  }>;
+}
+
+type AlbumsBootstrapData =
+  | AlbumBootstrapData
+  | Array<string | { name: string; published: boolean }>;
+
+interface ExternalLinksBootstrapData {
+  externalLinks: ExternalLink[];
+}
+
+interface BrandingBootstrapData {
+  siteName?: string;
+  avatarPath?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  language?: string;
+  headerTheme?: "light" | "dark" | "custom";
+  headerBackgroundColor?: string;
+  headerTextColor?: string;
+  headerOpacity?: number;
+  headerBlur?: number;
+  headerBorderColor?: string;
+  headerBorderOpacity?: number;
+  headerDropdownTheme?: "light" | "dark";
+  photoGridTheme?: "light" | "dark";
+}
+
+const DEFAULT_BRANDING: BrandingBootstrapData = {
+  siteName: "Galleria",
+  avatarPath: "/photos/avatar.png",
+  primaryColor: "#4ade80",
+  secondaryColor: "#3b82f6",
+  language: "en",
+  headerTheme: "light",
+  headerBackgroundColor: "#e7e7e7",
+  headerTextColor: "#1e1e1e",
+  headerOpacity: 1,
+  headerBlur: 0,
+  headerBorderColor: "#1e1e1e",
+  headerBorderOpacity: 0.2,
+  headerDropdownTheme: "light",
+  photoGridTheme: "dark",
+};
+
+async function fetchBootstrapEndpoint<T>(
+  endpoint: string,
+  label: string,
+  fallback: T
+): Promise<T> {
+  try {
+    const response = await fetchWithRateLimitCheck(`${API_URL}${endpoint}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${label}`);
+    }
+    return (await response.json()) as T;
+  } catch (err) {
+    if (err instanceof Error && err.message === "Rate limited") {
+      throw err;
+    }
+
+    const errorMessage =
+      err instanceof Error ? err.message : `Failed to fetch ${label}`;
+    error(errorMessage, err);
+    trackError(errorMessage, "app_initialization");
+    return fallback;
+  }
+}
+
 // LicenseWrapper component to show footer when license page loads
 function LicenseWrapper({
   setShowFooter,
@@ -447,7 +526,9 @@ function App() {
       // Check if initial data was server-side rendered (SSR) into the page
       const initialData = (window as any).__INITIAL_DATA__;
       
-      let albumsData, externalLinksData, brandingData;
+      let albumsData: AlbumsBootstrapData;
+      let externalLinksData: ExternalLinksBootstrapData;
+      let brandingData: BrandingBootstrapData;
       
       if (initialData && initialData.albums && initialData.externalLinks) {
         // Use pre-injected data from SSR (no network requests!)
@@ -458,20 +539,8 @@ function App() {
         // Use already-injected branding from SSR (no network request!)
         const runtimeBranding = (window as any).__RUNTIME_BRANDING__;
         brandingData = {
-          siteName: runtimeBranding?.siteName || "Galleria",
-          avatarPath: runtimeBranding?.avatarPath || "/photos/avatar.png",
-          primaryColor: runtimeBranding?.primaryColor || "#4ade80",
-          secondaryColor: runtimeBranding?.secondaryColor || "#3b82f6",
-          language: runtimeBranding?.language || "en",
-          headerTheme: runtimeBranding?.headerTheme || "light",
-          headerBackgroundColor: runtimeBranding?.headerBackgroundColor || "#e7e7e7",
-          headerTextColor: runtimeBranding?.headerTextColor || "#1e1e1e",
-          headerOpacity: runtimeBranding?.headerOpacity ?? 1,
-          headerBlur: runtimeBranding?.headerBlur ?? 0,
-          headerBorderColor: runtimeBranding?.headerBorderColor || "#1e1e1e",
-          headerBorderOpacity: runtimeBranding?.headerBorderOpacity ?? 0.2,
-          headerDropdownTheme: runtimeBranding?.headerDropdownTheme || "light",
-          photoGridTheme: runtimeBranding?.photoGridTheme || "dark"
+          ...DEFAULT_BRANDING,
+          ...runtimeBranding,
         };
         
         // Clear remaining SSR data after using it (homepage was already cleared by ContentGrid)
@@ -479,26 +548,23 @@ function App() {
       } else {
         // Fallback to API requests if SSR data not available
         debug("⚠ SSR data not available, fetching from API");
-        const [albumsResponse, externalLinksResponse, brandingResponse] =
-          await Promise.all([
-            fetchWithRateLimitCheck(`${API_URL}/api/albums`),
-            fetchWithRateLimitCheck(`${API_URL}/api/external-pages`),
-            fetchWithRateLimitCheck(`${API_URL}/api/branding`),
-          ]);
-
-        if (!albumsResponse.ok) {
-          throw new Error("Failed to fetch albums");
-        }
-        if (!externalLinksResponse.ok) {
-          throw new Error("Failed to fetch external links");
-        }
-        if (!brandingResponse.ok) {
-          throw new Error("Failed to fetch branding");
-        }
-
-        albumsData = await albumsResponse.json();
-        externalLinksData = await externalLinksResponse.json();
-        brandingData = await brandingResponse.json();
+        [albumsData, externalLinksData, brandingData] = await Promise.all([
+          fetchBootstrapEndpoint<AlbumsBootstrapData>(
+            "/api/albums",
+            "albums",
+            []
+          ),
+          fetchBootstrapEndpoint<ExternalLinksBootstrapData>(
+            "/api/external-pages",
+            "external links",
+            { externalLinks: [] }
+          ),
+          fetchBootstrapEndpoint<BrandingBootstrapData>(
+            "/api/branding",
+            "branding",
+            DEFAULT_BRANDING
+          ),
+        ]);
       }
 
       // Handle new API format: { albums: [...], folders: [...] } or old format: [...]
@@ -552,7 +618,7 @@ function App() {
         setFolders([]);
       }
       
-      setExternalLinks(externalLinksData.externalLinks);
+      setExternalLinks(externalLinksData.externalLinks || []);
       setSiteName(brandingData.siteName || "Galleria");
       
       // Only update avatar cache bust if the avatar path actually changed

@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Datum snimanja",
     "resolution": "Rezolucija",
-    "duration": "Trajanje"
+    "duration": "Trajanje",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Rezolucija",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Prikaži ovaj album u javnoj galeriji.",
     "folderControlsPublished": "Ovaj album nasljeđuje status objave iz svoje mape.",
     "homepageVisibilityDescription": "Uključi fotografije ovog albuma na početnu stranicu.",
-    "downloadsVisibilityDescription": "Dopusti posjetiteljima preuzimanje optimiziranih fotografija pune veličine iz ovog albuma."
+    "downloadsVisibilityDescription": "Dopusti posjetiteljima preuzimanje optimiziranih fotografija pune veličine iz ovog albuma.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Postavke {{section}} su spremljene!",
@@ -1005,7 +1016,20 @@
     "custom": "Prilagođeno...",
     "generate": "Generiraj",
     "invalidCustomTime": "Molimo unesite valjan broj minuta",
-    "copied": "✓ Kopirano!"
+    "copied": "✓ Kopirano!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Podijeli video",

@@ -15,7 +15,8 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from "@simplewebauthn/types";
-import config, { isEnvSet } from "../config.js";
+import config, { isEnvSet, getCurrentConfig } from "../config.js";
+import { publicSiteUrl } from "../../../shared/deployment.js";
 import { debug, warn } from "../utils/logger.js";
 
 // Get RP (Relying Party) configuration from environment or config
@@ -27,30 +28,11 @@ const getRPConfig = () => {
   // If not set via env vars, try to infer from environment variables or config
   if (!rpID || !origin) {
     try {
-      // First, try to use FRONTEND_DOMAIN from environment
-      if (isEnvSet(process.env.FRONTEND_DOMAIN)) {
-        const frontendUrl = new URL(process.env.FRONTEND_DOMAIN!);
+      const siteUrl = publicSiteUrl(getCurrentConfig());
+      if (siteUrl) {
+        const frontendUrl = new URL(siteUrl);
         rpID = rpID || frontendUrl.hostname;
-        origin = origin || process.env.FRONTEND_DOMAIN;
-      }
-      // Fallback to config.frontend.apiUrl if available
-      else if (config.frontend?.apiUrl) {
-        const url = new URL(config.frontend.apiUrl);
-        const hostname = url.hostname;
-
-        // If it's an API subdomain, try to convert to www subdomain for frontend
-        if (hostname.startsWith("api-dev.") || hostname.startsWith("api.")) {
-          const frontendHostname = hostname
-            .replace("api-dev.", "www-dev.")
-            .replace("api.", "www.");
-          rpID = rpID || frontendHostname;
-          const protocol = url.protocol;
-          origin = origin || `${protocol}//${frontendHostname}`;
-        } else if (hostname === "localhost" || hostname === "127.0.0.1") {
-          rpID = rpID || "localhost";
-          origin =
-            origin || `http://localhost:${config.frontend?.port || 3000}`;
-        }
+        origin = origin || frontendUrl.origin;
       }
     } catch (err) {
       warn(
@@ -128,21 +110,27 @@ export async function verifyPasskeyRegistration(
 }
 
 /**
- * Generate options for passkey authentication
+ * Generate options for passkey authentication.
+ *
+ * Always discoverable: allowCredentials is intentionally empty regardless of
+ * any caller-supplied passkeys. Populating allowCredentials from a public
+ * email lookup enables account/credential enumeration (ticket #3444).
+ *
+ * @param _existingPasskeys unused — kept for call-site compatibility
  */
 export async function generatePasskeyAuthenticationOptions(
-  existingPasskeys: any[] = []
+  _existingPasskeys: any[] = []
 ) {
   const { rpID } = getRPConfig();
 
   debug("[Passkeys] Generating auth options for RP:", rpID);
 
-  // Don't specify allowCredentials - this lets password managers (like 1Password)
-  // automatically offer their stored passkeys without browser showing generic options
+  // Empty allowCredentials: discoverable credentials only. Password managers
+  // (e.g. 1Password) offer stored passkeys without server-side credential lists.
   const options = await generateAuthenticationOptions({
     rpID,
     userVerification: "preferred",
-    // timeout: 60000, // 60 seconds
+    allowCredentials: [],
   });
 
   return options;

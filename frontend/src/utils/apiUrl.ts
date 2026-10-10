@@ -11,11 +11,11 @@ declare global {
 
 export function getApiUrl(): string {
   // Prefer runtime API URL (injected by server during OOBE)
-  if (typeof window !== 'undefined' && window.__RUNTIME_API_URL__) {
+  if (typeof window !== 'undefined' && typeof window.__RUNTIME_API_URL__ === 'string') {
     return window.__RUNTIME_API_URL__;
   }
   
   // Fall back to build-time API URL
-  return import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  return import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 }
 

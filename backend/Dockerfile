@@ -16,11 +16,12 @@ WORKDIR /app
 # Copy package files for workspace
 COPY package*.json ./
 COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
 
 # Install ALL dependencies via root workspace
 RUN npm ci && \
     echo "✓ Workspace dependencies installed" && \
-    ls -la backend/node_modules/cors backend/node_modules/express || (echo "ERROR: Backend dependencies missing!" && exit 1)
+    ls -la node_modules/cors node_modules/express || (echo "ERROR: Backend dependencies missing!" && exit 1)
 
 # Rebuild native modules for correct architecture
 RUN npm rebuild better-sqlite3 --build-from-source
@@ -31,6 +32,8 @@ RUN npm install -g tsx
 # Copy source code
 COPY backend/ ./backend/
 COPY scripts/ ./scripts/
+COPY config/ ./config/
+COPY shared/ ./shared/
 
 # Expose port
 EXPOSE 3001

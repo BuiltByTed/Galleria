@@ -30,7 +30,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated && req.isAuthenticated()) {
     const sessionUser = req.user as any;
     
-    // Verify user still exists in database
+    // Verify user still exists and is active in database
     if (sessionUser?.email) {
       const dbUser = getUserByEmail(sessionUser.email);
       if (!dbUser) {
@@ -42,6 +42,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
         req.session.destroy(() => {});
         return res.status(401).json({ error: 'User account no longer exists' });
       }
+      if (!dbUser.is_active) {
+        trace('[Auth Middleware] User deactivated (Google OAuth):', sessionUser.email);
+        req.logout((err) => {
+          if (err) trace('[Auth Middleware] Logout error:', err);
+        });
+        req.session.destroy(() => {});
+        return res.status(401).json({ error: 'Account is disabled' });
+      }
     }
     
     trace('[Auth Middleware] Authenticated via Passport');
@@ -52,13 +60,18 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if ((req.session as any)?.userId) {
     const userId = (req.session as any).userId;
     
-    // Verify user still exists in database
+    // Verify user still exists and is active in database
     const dbUser = getUserById(userId);
     if (!dbUser) {
       trace('[Auth Middleware] User no longer exists (credentials):', userId);
       // Destroy session and return 401
       req.session.destroy(() => {});
       return res.status(401).json({ error: 'User account no longer exists' });
+    }
+    if (!dbUser.is_active) {
+      trace('[Auth Middleware] User deactivated (credentials):', userId);
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: 'Account is disabled' });
     }
     
     trace('[Auth Middleware] Authenticated via credentials');
@@ -76,40 +89,72 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 export const isAuthenticated = requireAuth;
 
 /**
- * Helper function to get user from request with role lookup from database
+ * Build privileged-check user from a live DB row.
+ * Role and is_active must never come from session snapshots (frozen at login).
+ */
+function userFromDb(dbUser: NonNullable<ReturnType<typeof getUserById>>, sessionUser: any = {}) {
+  return {
+    ...sessionUser,
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name ?? sessionUser.name,
+    picture: dbUser.picture ?? sessionUser.picture,
+    role: dbUser.role,
+    is_active: dbUser.is_active,
+    mfa_enabled: dbUser.mfa_enabled,
+    auth_methods: dbUser.auth_methods,
+  };
+}
+
+/**
+ * Helper function to get user from request with role lookup from database.
+ * Always reloads role and is_active from the DB so demotion/deactivation
+ * take effect without requiring re-login.
  */
 async function getUserFromRequest(req: Request): Promise<any> {
-  // Check credential session first (has full user data including role)
-  if ((req.session as any)?.user) {
-    return (req.session as any).user;
+  // Credential session: session.user.role is a login-time snapshot — ignore it
+  if ((req.session as any)?.userId) {
+    const userId = (req.session as any).userId;
+    const dbUser = getUserById(userId);
+    if (!dbUser) {
+      return null;
+    }
+    return userFromDb(dbUser, (req.session as any).user || {});
   }
-  
-  // Check Passport session (Google OAuth) - need to look up role from DB
+
+  // Passport session (Google OAuth) — always look up role from DB
   if (req.user) {
     const sessionUser = req.user as any;
-    
-    // If user already has role, return it
-    if (sessionUser.role) {
-      return sessionUser;
+    let dbUser = sessionUser.email ? getUserByEmail(sessionUser.email) : null;
+    if (!dbUser && typeof sessionUser.id === 'number') {
+      dbUser = getUserById(sessionUser.id);
     }
-    
-    // Look up user in database to get role
+    if (!dbUser) {
+      return null;
+    }
+    return userFromDb(dbUser, sessionUser);
+  }
+
+  // Defensive: credential session with user blob but missing userId
+  if ((req.session as any)?.user) {
+    const sessionUser = (req.session as any).user;
+    if (sessionUser.id != null) {
+      const id = typeof sessionUser.id === 'string' ? parseInt(sessionUser.id, 10) : sessionUser.id;
+      if (!Number.isNaN(id)) {
+        const dbUser = getUserById(id);
+        if (dbUser) {
+          return userFromDb(dbUser, sessionUser);
+        }
+      }
+    }
     if (sessionUser.email) {
       const dbUser = getUserByEmail(sessionUser.email);
       if (dbUser) {
-        // Return combined user object with role from database
-        return {
-          ...sessionUser,
-          role: dbUser.role,
-          id: dbUser.id,
-        };
+        return userFromDb(dbUser, sessionUser);
       }
     }
-    
-    // Fallback - return session user (likely won't have role)
-    return sessionUser;
   }
-  
+
   return null;
 }
 
@@ -126,19 +171,25 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
-  // Get user and check role
+  // Get user and check role (fresh from DB — not session snapshot)
   const user = await getUserFromRequest(req);
   
   trace('[Admin Middleware] User lookup result:', {
     hasUser: !!user,
     email: user?.email,
     role: user?.role,
+    is_active: user?.is_active,
     id: user?.id,
   });
   
   if (!user || !user.role) {
     trace('[Admin Middleware] No user or role found');
     return res.status(403).json({ error: 'Access denied - role required' });
+  }
+
+  if (user.is_active === false) {
+    trace('[Admin Middleware] User is inactive:', user.email);
+    return res.status(401).json({ error: 'Account is disabled' });
   }
   
   if (user.role !== 'admin') {
@@ -166,12 +217,17 @@ export async function requireManager(req: Request, res: Response, next: NextFunc
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
-  // Get user and check role
+  // Get user and check role (fresh from DB — not session snapshot)
   const user = await getUserFromRequest(req);
   
   if (!user || !user.role) {
     trace('[Manager Middleware] No user or role found');
     return res.status(403).json({ error: 'Access denied - role required' });
+  }
+
+  if (user.is_active === false) {
+    trace('[Manager Middleware] User is inactive:', user.email);
+    return res.status(401).json({ error: 'Account is disabled' });
   }
   
   if (user.role !== 'admin' && user.role !== 'manager') {

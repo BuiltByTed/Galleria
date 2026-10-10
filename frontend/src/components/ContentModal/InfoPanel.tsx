@@ -27,6 +27,53 @@ interface InfoPanelProps {
   style?: React.CSSProperties;
 }
 
+/** Convert DMS [deg, min, sec] or decimal degrees, applying N/S/E/W ref. */
+function dmsToDecimal(value: number | number[] | undefined, ref?: string): number | null {
+  if (value === undefined || value === null) return null;
+  let decimal: number;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    decimal = value;
+  } else if (Array.isArray(value) && value.length >= 1) {
+    const d = Number(value[0]) || 0;
+    const m = Number(value[1]) || 0;
+    const s = Number(value[2]) || 0;
+    decimal = d + m / 60 + s / 3600;
+    if (!Number.isFinite(decimal)) return null;
+  } else {
+    return null;
+  }
+  if (ref === 'S' || ref === 'W') {
+    decimal = -Math.abs(decimal);
+  }
+  return decimal;
+}
+
+/** Prefer exifr latitude/longitude; fall back to raw GPS tags. */
+function getGpsCoords(exif: ExifData): { lat: number; lon: number } | null {
+  const lat =
+    typeof exif.latitude === 'number' && Number.isFinite(exif.latitude)
+      ? exif.latitude
+      : dmsToDecimal(exif.GPSLatitude, exif.GPSLatitudeRef);
+  const lon =
+    typeof exif.longitude === 'number' && Number.isFinite(exif.longitude)
+      ? exif.longitude
+      : dmsToDecimal(exif.GPSLongitude, exif.GPSLongitudeRef);
+  if (lat === null || lon === null) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+function formatCoord(value: number, isLat: boolean): string {
+  const abs = Math.abs(value);
+  const hemi = isLat ? (value >= 0 ? 'N' : 'S') : value >= 0 ? 'E' : 'W';
+  return `${abs.toFixed(5)}° ${hemi}`;
+}
+
+function openStreetMapUrl(lat: number, lon: number): string {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`;
+}
+
 // formatFileSize function moved to utils/formatters.ts
 
 const InfoPanel: React.FC<InfoPanelProps> = ({
@@ -83,6 +130,9 @@ const InfoPanel: React.FC<InfoPanelProps> = ({
   };
   
   if (!show) return null;
+
+  const gpsCoords =
+    !isVideo && exifData && !exifData.error ? getGpsCoords(exifData) : null;
 
   return (
     <div className="modal-info-panel" style={style}>
@@ -207,6 +257,23 @@ const InfoPanel: React.FC<InfoPanelProps> = ({
                   month: 'long',
                   day: 'numeric'
                 })}
+              </span>
+            </div>
+          )}
+
+          {gpsCoords && (
+            <div className="info-item">
+              <span className="info-label">{t('photo.location')}:</span>
+              <span className="info-value">
+                {formatCoord(gpsCoords.lat, true)}, {formatCoord(gpsCoords.lon, false)}{' '}
+                <a
+                  className="info-map-link"
+                  href={openStreetMapUrl(gpsCoords.lat, gpsCoords.lon)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t('photo.viewMap')}
+                </a>
               </span>
             </div>
           )}

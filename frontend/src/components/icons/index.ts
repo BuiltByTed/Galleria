@@ -33,6 +33,7 @@ export { default as ListViewIcon } from './ListViewIcon';
 export { default as LockIcon } from './LockIcon';
 export { default as MagicWandIcon } from './MagicWandIcon';
 export { default as LogoutIcon } from './LogoutIcon';
+export { default as PauseIcon } from './PauseIcon';
 export { default as PlayIcon } from './PlayIcon';
 export { default as PlusCircleIcon } from './PlusCircleIcon';
 export { default as SettingsIcon } from './SettingsIcon';

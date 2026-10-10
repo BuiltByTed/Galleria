@@ -8,6 +8,10 @@ import { Router, Request, Response } from 'express';
 import config from '../config.ts';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { error, warn, info, debug, verbose } from '../utils/logger.js';
+import {
+  analyticsTimeRange,
+  OPENOBSERVE_TIMESTAMP_SQL,
+} from '../utils/analytics-timestamp.js';
 
 const router = Router();
 
@@ -64,9 +68,7 @@ router.get('/visitors-over-time', requireAuth, async (req: Request, res: Respons
       return;
     }
     
-    // Calculate time range (OpenObserve uses microseconds)
-    const endTime = Date.now() * 1000;
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000 * 1000);
+    const { startTime, endTime } = analyticsTimeRange(days);
 
     // Build the query endpoint
     const queryEndpoint = `${endpoint}${organization}/_search`;
@@ -97,7 +99,7 @@ router.get('/visitors-over-time', requireAuth, async (req: Request, res: Respons
     const sql = `
       WITH normalized AS (
         SELECT
-          date_trunc('day', to_timestamp_micros(_timestamp) ${intervalStr}) AS day_local,
+          date_trunc('day', ${OPENOBSERVE_TIMESTAMP_SQL} ${intervalStr}) AS day_local,
           replace(trim(split_part(client_ip, ',', 1)), '::ffff:', '') AS ip
         FROM "${stream}"
         WHERE client_ip IS NOT NULL
@@ -180,9 +182,7 @@ router.get('/visitor-locations', requireAuth, async (req: Request, res: Response
     // Get time range from query params (default to last 30 days)
     const days = parseInt(req.query.days as string) || 30;
     
-    // Calculate time range (OpenObserve uses microseconds)
-    const endTime = Date.now() * 1000;
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000 * 1000);
+    const { startTime, endTime } = analyticsTimeRange(days);
 
     // Build the query endpoint
     const queryEndpoint = `${endpoint}${organization}/_search`;
@@ -297,9 +297,7 @@ router.get('/pageviews-by-hour', requireAuth, async (req: Request, res: Response
       return;
     }
     
-    // Calculate time range (OpenObserve uses microseconds)
-    const endTime = Date.now() * 1000;
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000 * 1000);
+    const { startTime, endTime } = analyticsTimeRange(days);
 
     // Build the query endpoint
     const queryEndpoint = `${endpoint}${organization}/_search`;
@@ -326,7 +324,7 @@ router.get('/pageviews-by-hour', requireAuth, async (req: Request, res: Response
     // Query for pageviews per hour with timezone adjustment
     const sql = `
       SELECT
-        date_trunc('hour', to_timestamp_micros(_timestamp) ${intervalStr}) AS hour_local,
+        date_trunc('hour', ${OPENOBSERVE_TIMESTAMP_SQL} ${intervalStr}) AS hour_local,
         COUNT(*) AS pageviews
       FROM "${stream}"
       WHERE event_type = 'pageview'
@@ -403,9 +401,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
     // Get time range from query params (default to last 30 days)
     const days = parseInt(req.query.days as string) || 30;
-    // Calculate time range based on the days parameter (OpenObserve uses microseconds)
-    const endTime = Date.now() * 1000; // Convert to microseconds
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000 * 1000); // Convert days to microseconds
+    const { startTime, endTime } = analyticsTimeRange(days);
 
     // Build the query endpoint: {endpoint}{organization}/_search
     const queryEndpoint = `${endpoint}${organization}/_search`;
@@ -511,4 +507,3 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 });
 
 export default router;
-

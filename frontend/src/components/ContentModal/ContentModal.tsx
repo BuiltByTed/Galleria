@@ -34,6 +34,8 @@ interface ContentModalProps {
   isHomepage?: boolean; // Whether we're on the homepage
 }
 
+const AUTOPLAY_INTERVAL_MS = 5000;
+
 const ContentModal: React.FC<ContentModalProps> = ({
   selectedPhoto,
   album,
@@ -55,6 +57,9 @@ const ContentModal: React.FC<ContentModalProps> = ({
   const [loadingExif, setLoadingExif] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAutoplay, setIsAutoplay] = useState(false);
+  const [isHoverPaused, setIsHoverPaused] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [showNavigationHint, setShowNavigationHint] = useState(
     () => !localStorage.getItem('hideNavigationHint')
   );
@@ -113,6 +118,7 @@ const ContentModal: React.FC<ContentModalProps> = ({
     setShowModalImage(false);
     setThumbnailLoaded(false);
     setExifData(null);
+    setIsVideoPlaying(false);
     modalOpenTimeRef.current = Date.now();
     
     // Update URL with photo parameter
@@ -307,6 +313,11 @@ const ContentModal: React.FC<ContentModalProps> = ({
         logError('Error attempting to exit fullscreen:', err);
       }
     }
+  }, []);
+
+  // Toggle slideshow autoplay
+  const toggleAutoplay = useCallback(() => {
+    setIsAutoplay((prev) => !prev);
   }, []);
 
   // Fetch EXIF data
@@ -523,6 +534,36 @@ const ContentModal: React.FC<ContentModalProps> = ({
     };
   }, []);
 
+  // Detect video play/pause so autoplay holds while a video is playing
+  useEffect(() => {
+    const container = mediaContainerRef.current;
+    if (!container) return;
+
+    const onPlay = () => setIsVideoPlaying(true);
+    const onPauseOrEnded = () => setIsVideoPlaying(false);
+
+    container.addEventListener('play', onPlay, true);
+    container.addEventListener('pause', onPauseOrEnded, true);
+    container.addEventListener('ended', onPauseOrEnded, true);
+
+    return () => {
+      container.removeEventListener('play', onPlay, true);
+      container.removeEventListener('pause', onPauseOrEnded, true);
+      container.removeEventListener('ended', onPauseOrEnded, true);
+    };
+  }, [selectedPhoto.id]);
+
+  // Slideshow autoplay: fixed interval, reuse next handler; hold on hover/focus or video play
+  useEffect(() => {
+    if (!isAutoplay || isHoverPaused || isVideoPlaying) return;
+
+    const timerId = window.setInterval(() => {
+      handleNavigateNext();
+    }, AUTOPLAY_INTERVAL_MS);
+
+    return () => window.clearInterval(timerId);
+  }, [isAutoplay, isHoverPaused, isVideoPlaying, handleNavigateNext]);
+
   // Prevent body scroll when modal is open
   useEffect(() => {
     const scrollY = window.scrollY;
@@ -586,12 +627,24 @@ const ContentModal: React.FC<ContentModalProps> = ({
           localStorage.setItem('hideNavigationHint', 'true');
         }
         handleNavigateNext();
+      } else if (e.key === " " || e.code === "Space") {
+        // Space toggles slideshow; leave Escape to close; don't steal from video/inputs
+        const target = e.target as HTMLElement | null;
+        if (
+          target &&
+          (target.closest("input, textarea, select, [contenteditable='true']") ||
+            target.closest("video, .modal-video-player"))
+        ) {
+          return;
+        }
+        e.preventDefault();
+        toggleAutoplay();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose, handleNavigatePrev, handleNavigateNext, showNavigationHint]);
+  }, [handleClose, handleNavigatePrev, handleNavigateNext, showNavigationHint, toggleAutoplay]);
 
   return (
     <div 
@@ -626,15 +679,26 @@ const ContentModal: React.FC<ContentModalProps> = ({
               width: containerWidth ? `${containerWidth}px` : undefined,
               height: containerHeight ? `${containerHeight}px` : undefined
             }}
+            onMouseEnter={() => setIsHoverPaused(true)}
+            onMouseLeave={() => setIsHoverPaused(false)}
+            onFocusCapture={() => setIsHoverPaused(true)}
+            onBlurCapture={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (!e.currentTarget.contains(next)) {
+                setIsHoverPaused(false);
+              }
+            }}
           >
             <ModalControls
               show={thumbnailLoaded}
               showInfo={showInfo}
               copiedLink={copiedLink}
               isFullscreen={isFullscreen}
+              isAutoplay={isAutoplay}
               onToggleInfo={handleToggleInfo}
               onCopyLink={handleCopyLink}
               onDownload={handleDownload}
+              onToggleAutoplay={toggleAutoplay}
               onToggleFullscreen={toggleFullscreen}
               onClose={handleClose}
               selectedPhoto={selectedPhoto}

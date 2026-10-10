@@ -24,6 +24,7 @@ export default function SetupWizard() {
   // Form data
   const [siteName, setSiteName] = useState('');
   const [authorizedEmail, setAuthorizedEmail] = useState('');
+  const [adminUsername, setAdminUsername] = useState('');
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleClientSecret, setGoogleClientSecret] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
@@ -143,15 +144,12 @@ export default function SetupWizard() {
       return;
     }
     
-    if (!authorizedEmail.trim()) {
-      setError('Email is required');
+    if (authMethod === 'google' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorizedEmail.trim())) {
+      setError('Please enter a valid email address');
       return;
     }
-    
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(authorizedEmail)) {
-      setError('Please enter a valid email address');
+    if (authMethod === 'password' && !/^[A-Za-z0-9][A-Za-z0-9_.-]{2,63}$/.test(adminUsername.trim())) {
+      setError('Username must be 3–64 characters: letters, numbers, dots, underscores or hyphens');
       return;
     }
 
@@ -208,7 +206,8 @@ export default function SetupWizard() {
         },
         body: JSON.stringify({
           siteName,
-          authorizedEmail,
+          authorizedEmail: authMethod === 'google' ? authorizedEmail.trim() : undefined,
+          adminUsername: authMethod === 'password' ? adminUsername.trim() : undefined,
           authMethod,
           adminName: authMethod === 'password' ? adminName : undefined,
           adminPassword: authMethod === 'password' ? adminPassword : undefined,
@@ -448,16 +447,19 @@ export default function SetupWizard() {
               </p>
 
               <div className="form-group">
-                <label htmlFor="authorizedEmail">
-                  {t('oobe.emailLabel')} *
-                  <span className="field-hint">{t('oobe.emailHint')}</span>
+                <label htmlFor="loginIdentifier">
+                  {authMethod === 'google' ? t('oobe.emailLabel') : t('oobe.usernameLabel', 'Username')} *
+                  <span className="field-hint">{authMethod === 'google' ? t('oobe.emailHint') : t('oobe.usernameHint', 'Choose a local username. No email address is needed.')}</span>
                 </label>
                 <input
-                  type="email"
-                  id="authorizedEmail"
-                  value={authorizedEmail}
-                  onChange={(e) => setAuthorizedEmail(e.target.value)}
-                  placeholder="john@example.com"
+                  type={authMethod === 'google' ? 'email' : 'text'}
+                  id="loginIdentifier"
+                  name={authMethod === 'google' ? 'email' : 'username'}
+                  autoComplete="username"
+                  value={authMethod === 'google' ? authorizedEmail : adminUsername}
+                  onChange={(e) => authMethod === 'google' ? setAuthorizedEmail(e.target.value) : setAdminUsername(e.target.value)}
+                  placeholder={authMethod === 'google' ? 'john@example.com' : 'photographer'}
+                  maxLength={authMethod === 'google' ? 254 : 64}
                   required
                   autoFocus
                 />
@@ -479,7 +481,7 @@ export default function SetupWizard() {
                     />
                     <div className="auth-method-label">
                       <strong>🔑 {t('oobe.authMethodPassword')}</strong>
-                      <span>{t('oobe.authMethodPasswordDescription')}</span>
+                      <span>{t('oobe.authMethodUsernameDescription', 'Sign in with a username and password')}</span>
                     </div>
                   </label>
                   <label className="auth-method-option">
@@ -559,7 +561,7 @@ export default function SetupWizard() {
                       <li>{t('oobe.googleStep2')}</li>
                       <li>{t('oobe.googleStep3')}</li>
                       <li>{t('oobe.googleStep4')}</li>
-                      <li>{t('oobe.googleStep5')} <code>{window.location.origin.replace(':3000', ':3001')}/api/auth/google/callback</code></li>
+                      <li>{t('oobe.googleStep5')} <code>{(API_URL || window.location.origin)}/api/auth/google/callback</code></li>
                       <li>{t('oobe.googleStep6')}</li>
                     </ol>
                   </div>
@@ -606,16 +608,15 @@ export default function SetupWizard() {
                   type="button" 
                   onClick={() => {
                     // Validation
-                    if (!authorizedEmail.trim()) {
-                      setError(t('oobe.errorRequiredField'));
-                      return;
-                    }
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    if (!emailRegex.test(authorizedEmail)) {
+                    if (authMethod === 'google' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorizedEmail.trim())) {
                       setError(t('oobe.errorInvalidEmail'));
                       return;
                     }
-                    
+                    if (authMethod === 'password' && !/^[A-Za-z0-9][A-Za-z0-9_.-]{2,63}$/.test(adminUsername.trim())) {
+                      setError(t('oobe.errorInvalidUsername', 'Username must be 3–64 characters: letters, numbers, dots, underscores or hyphens'));
+                      return;
+                    }
+
                     if (authMethod === 'password') {
                       if (!adminName.trim()) {
                         setError(t('oobe.errorRequiredField'));

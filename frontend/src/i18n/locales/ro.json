@@ -104,7 +104,11 @@
     "iso": "ISO",
     "dateTaken": "Data capturării",
     "resolution": "Rezoluție",
-    "duration": "Durată"
+    "duration": "Durată",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Pornește diaporama",
+    "pauseSlideshow": "Pune diaporama pe pauză"
   },
   "video": {
     "resolution": "Rezoluție",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "Afișează acest album în galeria publică.",
     "folderControlsPublished": "Acest album moștenește statutul publicat de la dosarul său.",
     "homepageVisibilityDescription": "Include fotografiile acestui album pe pagina principală.",
-    "downloadsVisibilityDescription": "Permite vizitatorilor să descarce fotografii optimizate la dimensiune completă din acest album."
+    "downloadsVisibilityDescription": "Permite vizitatorilor să descarce fotografii optimizate la dimensiune completă din acest album.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Setările {{section}} au fost salvate!",
@@ -913,7 +924,20 @@
     "custom": "Personalizat...  ",
     "generate": "Generați  ",
     "invalidCustomTime": "Vă rugăm să introduceți un număr valid de minute  ",
-    "copied": "✓ Copiat!  "
+    "copied": "✓ Copiat!  ",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Partajați videoclipul",

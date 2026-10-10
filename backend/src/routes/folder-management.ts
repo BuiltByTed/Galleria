@@ -24,8 +24,11 @@ import {
 } from "../database.js";
 import { generateStaticJSONFiles } from "./static-json.js";
 import fs from "fs";
-import path from "path";
 import { requireAuth, requireAdmin, requireManager } from '../auth/middleware.js';
+import {
+  deleteAlbumsFromFolder,
+  FolderAlbumDeletionError,
+} from "../utils/folder-album-deletion.js";
 
 const router = Router();
 
@@ -174,48 +177,34 @@ router.delete("/:folder", requireManager, async (req: Request, res: Response): P
       
       const photosDir = req.app.get('photosDir');
       const optimizedDir = req.app.get('optimizedDir');
-      
-      for (const album of albumsInFolder) {
-        try {
-          const albumPath = path.join(photosDir, album.name);
-          
-          // Delete from photos directory (if it exists)
-          if (fs.existsSync(albumPath)) {
-            fs.rmSync(albumPath, { recursive: true, force: true });
-          }
-          
-          // Delete from optimized directory (if exists)
-          ['thumbnail', 'modal', 'download'].forEach(dir => {
-            const optimizedPath = path.join(optimizedDir, dir, album.name);
-            if (fs.existsSync(optimizedPath)) {
-              fs.rmSync(optimizedPath, { recursive: true, force: true });
-            }
-          });
-          
-          // Cancel share link expiry timers before deleting
-          try {
+      const videoDir = req.app.get('videoDir');
+
+      await deleteAlbumsFromFolder(
+        albumsInFolder,
+        { photosDir, optimizedDir, videoDir },
+        {
+          pathExists: targetPath => fs.existsSync(targetPath),
+          removeDirectory: targetPath => {
+            fs.rmSync(targetPath, { recursive: true, force: true });
+          },
+          cancelShareLinkTimers: async albumName => {
             const { getShareLinksForAlbum } = await import('../database.js');
             const { cancelShareLinkExpiryTimer } = await import('../services/share-link-expiry-tracker.js');
-            const existingLinks = getShareLinksForAlbum(album.name);
+            const existingLinks = getShareLinksForAlbum(albumName);
             for (const link of existingLinks) {
               cancelShareLinkExpiryTimer(link.id);
             }
-          } catch (err) {
-            error(`[FolderManagement] Failed to cancel share link timers for ${album.name}:`, err);
-          }
-          
-          // Delete all metadata for this album from database
-          deleteAlbumMetadata(album.name);
-          
-          // Delete album state from database (cascade delete will also remove share_links)
-          deleteAlbumState(album.name);
-          
-          info(`[FolderManagement] Deleted album: ${album.name}`);
-        } catch (err) {
-          error(`[FolderManagement] Failed to delete album ${album.name}:`, err);
-          // Continue deleting other albums even if one fails
+          },
+          deleteAlbumMetadata,
+          deleteAlbumState,
+          onVideoDirectoryDeleted: albumName => {
+            info(`[FolderManagement] Deleted video directory: ${albumName}`);
+          },
+          onAlbumDeleted: albumName => {
+            info(`[FolderManagement] Deleted album: ${albumName}`);
+          },
         }
-      }
+      );
     }
 
     // Delete folder state from database
@@ -267,6 +256,15 @@ router.delete("/:folder", requireManager, async (req: Request, res: Response): P
 
     res.json({ success: true });
   } catch (err) {
+    if (err instanceof FolderAlbumDeletionError) {
+      error(`[FolderManagement] Failed to delete album ${err.failedAlbums[0]}:`, err.cause);
+      res.status(500).json({
+        error: 'Failed to delete all albums; folder was not deleted',
+        failedAlbums: err.failedAlbums
+      });
+      return;
+    }
+
     error('[FolderManagement] Failed to delete folder:', err);
     res.status(500).json({ error: 'Failed to delete folder' });
   }
@@ -458,4 +456,3 @@ router.put('/sort-order', requireManager, async (req: Request, res: Response): P
 });
 
 export default router;
-

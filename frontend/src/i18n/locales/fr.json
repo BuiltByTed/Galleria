@@ -104,7 +104,11 @@
     "noContentYet": "Aucun contenu pour le moment",
     "albumEmpty": "Cet album est vide. Veuillez vous connecter pour ajouter du contenu.",
     "homepageEmpty": "Ajoutez des albums ou utilisez le commutateur de la page d'accueil pour les ajouter à la page d'accueil.",
-    "goToAdminPanel": "Aller au panneau d'administration"
+    "goToAdminPanel": "Aller au panneau d'administration",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Lancer le diaporama",
+    "pauseSlideshow": "Mettre le diaporama en pause"
   },
   "video": {
     "resolution": "Résolution",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "Afficher cet album dans la galerie publique.",
     "folderControlsPublished": "Cet album hérite du statut publié de son dossier.",
     "homepageVisibilityDescription": "Inclure les photos de cet album sur la page d'accueil.",
-    "downloadsVisibilityDescription": "Autoriser les visiteurs à télécharger des photos optimisées en taille réelle de cet album."
+    "downloadsVisibilityDescription": "Autoriser les visiteurs à télécharger des photos optimisées en taille réelle de cet album.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Paramètres de {{section}} enregistrés !",
@@ -913,7 +924,20 @@
     "custom": "Personnalisé...",
     "generate": "Générer",
     "invalidCustomTime": "Veuillez entrer un nombre valide de minutes",
-    "copied": "✓ Copié !"
+    "copied": "✓ Copié !",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Partager la vidéo",

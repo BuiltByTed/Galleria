@@ -104,7 +104,11 @@
     "noContentYet": "Brak treści",
     "albumEmpty": "Ten album jest pusty. Zaloguj się, aby dodać treść.",
     "homepageEmpty": "Dodaj kilka albumów lub użyj przełącznika na stronie głównej, aby dodać je do strony głównej.",
-    "goToAdminPanel": "Przejdź do panelu administracyjnego"
+    "goToAdminPanel": "Przejdź do panelu administracyjnego",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Odtwórz pokaz slajdów",
+    "pauseSlideshow": "Wstrzymaj pokaz slajdów"
   },
   "video": {
     "resolution": "Rozdzielczość",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "Pokaż ten album w galerii publicznej.",
     "folderControlsPublished": "Ten album dziedziczy status opublikowany z jego folderu.",
     "homepageVisibilityDescription": "Uwzględnij zdjęcia z tego albumu na stronie głównej.",
-    "downloadsVisibilityDescription": "Pozwól odwiedzającym pobierać zoptymalizowane zdjęcia w pełnym rozmiarze z tego albumu."
+    "downloadsVisibilityDescription": "Pozwól odwiedzającym pobierać zoptymalizowane zdjęcia w pełnym rozmiarze z tego albumu.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Ustawienia {{section}} zapisane!",
@@ -913,7 +924,20 @@
     "custom": "Niestandardowe...  ",
     "generate": "Generuj  ",
     "invalidCustomTime": "Proszę wprowadzić prawidłową liczbę minut  ",
-    "copied": "✓ Skopiowano!  "
+    "copied": "✓ Skopiowano!  ",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Udostępnij wideo",

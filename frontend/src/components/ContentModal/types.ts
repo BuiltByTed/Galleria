@@ -14,6 +14,14 @@ export interface ExifData {
   ExposureTime?: number;
   ISO?: number;
   DateTimeOriginal?: string;
+  /** Decimal degrees from exifr GPS merge (preferred). */
+  latitude?: number;
+  longitude?: number;
+  /** Raw EXIF GPS tags when present (number or DMS array). */
+  GPSLatitude?: number | number[];
+  GPSLongitude?: number | number[];
+  GPSLatitudeRef?: string;
+  GPSLongitudeRef?: string;
   error?: string;
 }
 

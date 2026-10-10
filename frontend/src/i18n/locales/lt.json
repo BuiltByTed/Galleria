@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Fotografavimo data",
     "resolution": "Raiška",
-    "duration": "Trukmė"
+    "duration": "Trukmė",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Raiška",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Rodyti šį albumą viešojoje galerijoje.",
     "folderControlsPublished": "Šis albumas paveldi paskelbtą būseną iš savo aplanko.",
     "homepageVisibilityDescription": "Įtraukti šio albumo nuotraukas į pagrindinį puslapį.",
-    "downloadsVisibilityDescription": "Leisti lankytojams atsisiųsti viso dydžio optimizuotas nuotraukas iš šio albumo."
+    "downloadsVisibilityDescription": "Leisti lankytojams atsisiųsti viso dydžio optimizuotas nuotraukas iš šio albumo.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} nustatymai išsaugoti!",
@@ -1005,7 +1016,20 @@
     "custom": "Pasirinktinis...",
     "generate": "Generuoti",
     "invalidCustomTime": "Prašome įvesti galiojantį minučių skaičių",
-    "copied": "✓ Nukopijuota!"
+    "copied": "✓ Nukopijuota!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Dalintis vaizdo įrašu",

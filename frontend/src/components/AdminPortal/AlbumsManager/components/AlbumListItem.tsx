@@ -4,7 +4,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Photo, UploadingImage } from '../types';
 import { API_URL } from '../../../../config';
-import { EditIcon, TrashIcon, VideoIcon } from '../../../icons';
+import { EditIcon, TrashIcon, VideoIcon, FolderArrowIcon } from '../../../icons';
 
 interface AlbumListItemProps {
   // Either an existing photo or an uploading image
@@ -15,6 +15,7 @@ interface AlbumListItemProps {
   // Handlers
   onEdit: (photo: Photo) => void;
   onDelete: (album: string, filename: string, photoTitle: string, thumbnail: string, mediaType?: 'photo' | 'video') => void;
+  onMove?: (album: string, filename: string, photoTitle: string, thumbnail: string, mediaType?: 'photo' | 'video') => void;
   
   // State
   deletingPhotoId: string | null;
@@ -27,6 +28,7 @@ export const AlbumListItem: React.FC<AlbumListItemProps> = ({
   uploadingIndex,
   onEdit,
   onDelete,
+  onMove,
   deletingPhotoId,
   canEdit,
 }) => {
@@ -144,17 +146,29 @@ export const AlbumListItem: React.FC<AlbumListItemProps> = ({
               if (photoData) onEdit(photoData);
             }}
             className="list-action-btn"
-            title="Edit photo"
+            title={t('albumsManager.editMetadata')}
           >
             <EditIcon width="16" height="16" />
           </button>
+          {onMove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove(album, filename, title, thumbnailUrl, photoData?.media_type);
+              }}
+              className="list-action-btn"
+              title={t('albumsManager.moveToAlbum')}
+            >
+              <FolderArrowIcon width="16" height="16" />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDelete(album, filename, title, thumbnailUrl, photoData?.media_type);
             }}
             className="list-action-btn delete"
-            title="Delete photo"
+            title={t('albumsManager.deletePhoto')}
           >
             <TrashIcon width="16" height="16" />
           </button>

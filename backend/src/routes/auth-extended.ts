@@ -43,13 +43,110 @@ import {
   generatePasskeyAuthenticationOptions,
   verifyPasskeyAuthentication,
 } from '../auth/passkeys.js';
+import {
+  planSensitiveReauth,
+  userHasPasskeys,
+  userHasPassword,
+} from '../auth/reauth.js';
 import crypto from 'crypto';
 import { sendInvitationEmail, sendPasswordResetEmail, isEmailServiceEnabled, generateInvitationUrl } from '../email.js';
 import { getCurrentConfig, reloadConfig } from '../config.js';
 import { sendNotificationToUser } from '../push-notifications.js';
 import { translateNotification } from '../i18n-backend.js';
+import { destroySessionsForUser } from '../auth/session-invalidation.js';
 
 const router = Router();
+
+/**
+ * Step-up re-auth for MFA disable / backup-code mint.
+ * Password when present; else passkey assertion or recent-login window.
+ * Returns null on success, or an Express response already sent.
+ */
+async function requireSensitiveReauth(
+  req: Request,
+  res: Response,
+  user: User
+): Promise<true | null> {
+  const {
+    password,
+    passkeyCredential,
+    passkeySessionId,
+    // alternate names clients may send
+    credential,
+    sessionId,
+  } = req.body || {};
+
+  const plan = planSensitiveReauth({
+    hasPassword: userHasPassword(user),
+    hasPasskeys: userHasPasskeys(user),
+    password,
+    passkeyCredential: passkeyCredential ?? credential,
+    passkeySessionId: passkeySessionId ?? sessionId,
+    sessionAuthenticatedAt: (req.session as any)?.authenticatedAt,
+  });
+
+  if (plan.action === 'reject') {
+    res.status(plan.status).json({
+      error: plan.error,
+      code: plan.code,
+      availableMethods: plan.availableMethods,
+    });
+    return null;
+  }
+
+  if (plan.action === 'accept_recent_login') {
+    return true;
+  }
+
+  if (plan.action === 'verify_password') {
+    if (!verifyPassword(user, plan.password)) {
+      res.status(401).json({ error: 'Invalid password', code: 'invalid_password' });
+      return null;
+    }
+    return true;
+  }
+
+  // verify_passkey
+  const challengeKey = `passkey-reauth-${plan.sessionId}`;
+  const stored = challenges.get(challengeKey);
+  if (!stored || stored.userId !== user.id || stored.expires < Date.now()) {
+    res.status(400).json({
+      error: 'Invalid or expired passkey reauth challenge',
+      code: 'passkey_challenge_invalid',
+    });
+    return null;
+  }
+
+  const credentialPayload = plan.credential as { id?: string };
+  if (!credentialPayload?.id) {
+    res.status(400).json({ error: 'Missing passkey credential', code: 'passkey_required' });
+    return null;
+  }
+
+  const result = getPasskeyByCredentialId(credentialPayload.id);
+  if (!result || result.user.id !== user.id) {
+    res.status(400).json({ error: 'Passkey not found', code: 'passkey_not_found' });
+    return null;
+  }
+
+  const verification = await verifyPasskeyAuthentication(
+    plan.credential as any,
+    stored.challenge,
+    result.passkey.credentialPublicKey,
+    result.passkey.counter
+  );
+
+  if (!verification.verified) {
+    res.status(401).json({ error: 'Passkey verification failed', code: 'passkey_invalid' });
+    return null;
+  }
+
+  updatePasskeyCounter(user.id, result.passkey.id, verification.authenticationInfo.newCounter);
+  challenges.delete(challengeKey);
+  // Refresh authenticatedAt so subsequent sensitive ops in-window succeed without re-prompt.
+  (req.session as any).authenticatedAt = Date.now();
+  return true;
+}
 
 /**
  * Helper to send push notification to all admin users
@@ -191,12 +288,14 @@ async function trackFailedLogin(email: string, ipAddress: string): Promise<void>
  */
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password, mfaToken } = req.body;
+    const { password, mfaToken } = req.body;
+    const identifier = req.body.username ?? req.body.email;
+    const email = typeof identifier === "string" ? identifier.trim() : "";
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
     const ipString = Array.isArray(ipAddress) ? ipAddress[0] : ipAddress;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Missing email or password' });
+    if (!email || typeof password !== 'string' || !password) {
+      return res.status(400).json({ error: 'Missing username or password' });
     }
 
     // Find user by email
@@ -248,47 +347,56 @@ router.post('/login', async (req: Request, res: Response) => {
       }
     }
 
-    // Login successful - create session
-    (req.session as any).userId = user.id;
-    (req.session as any).user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      picture: user.picture,
-      role: user.role,
-      mfa_enabled: user.mfa_enabled,
-      passkey_enabled: user.passkeys && user.passkeys.length > 0,
-      auth_methods: user.auth_methods,
-    };
-
-    info('[Login] Creating session for user:', {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      mfa_enabled: user.mfa_enabled,
-      sessionID: req.sessionID,
-    });
-
-    // Save session explicitly
-    req.session.save((err) => {
-      if (err) {
-        error('[Login] Session save error:', err);
+    // Login successful — regenerate session ID before privilege elevation
+    // (prevents session fixation on a pre-planted connect.sid)
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        error('[Login] Session regenerate error:', regenErr);
         return res.status(500).json({ error: 'Session creation failed' });
       }
 
-      info('[Login] ✅ Session saved successfully:', {
+      (req.session as any).userId = user.id;
+      (req.session as any).authenticatedAt = Date.now();
+      (req.session as any).user = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        role: user.role,
+        mfa_enabled: user.mfa_enabled,
+        passkey_enabled: user.passkeys && user.passkeys.length > 0,
+        auth_methods: user.auth_methods,
+      };
+
+      info('[Login] Creating session for user:', {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        mfa_enabled: user.mfa_enabled,
         sessionID: req.sessionID,
-        userId: (req.session as any).userId,
       });
 
-      res.json({
-        success: true,
-        user: {
-          id: user!.id,
-          email: user!.email,
-          name: user!.name,
-          picture: user!.picture,
-        },
+      // Save session explicitly
+      req.session.save((err) => {
+        if (err) {
+          error('[Login] Session save error:', err);
+          return res.status(500).json({ error: 'Session creation failed' });
+        }
+
+        info('[Login] ✅ Session saved successfully:', {
+          sessionID: req.sessionID,
+          userId: (req.session as any).userId,
+        });
+
+        res.json({
+          success: true,
+          user: {
+            id: user!.id,
+            email: user!.email,
+            name: user!.name,
+            picture: user!.picture,
+          },
+        });
       });
     });
   } catch (err) {
@@ -610,16 +718,11 @@ router.post('/password-reset/request', async (req: Request, res: Response) => {
 
     const user = getUserByEmail(email);
 
-    // Don't reveal if user exists or not (security best practice)
-    if (!user) {
+    // Uniform response for unknown emails and MFA accounts — do not reveal
+    // registration or MFA status. Self-service reset is only issued for
+    // non-MFA accounts; MFA recovery is via authenticated admin paths.
+    if (!user || user.mfa_enabled || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) {
       return res.json({ success: true, message: 'If the email exists, a password reset link has been sent' });
-    }
-
-    // Only allow password reset if user doesn't have MFA enabled
-    if (user.mfa_enabled) {
-      return res.status(400).json({ 
-        error: 'Password reset not available for accounts with MFA enabled. Contact an administrator for assistance.' 
-      });
     }
 
     // Generate reset token
@@ -721,6 +824,14 @@ router.post('/password-reset/:token/complete', async (req: Request, res: Respons
     
     // Clear reset token
     clearPasswordResetToken(user.id);
+
+    // Invalidate every existing session for this user (stolen cookies must not survive reset)
+    await destroySessionsForUser(
+      req.sessionStore as any,
+      user.id,
+      user.email,
+      'password-reset'
+    );
 
     // Send push notification to all admins
     await notifyAllAdmins(
@@ -883,21 +994,35 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
     // Update password
     updatePassword(userId, newPassword);
 
-    // Send push notification to all admins
-    if (user) {
-      await notifyAllAdmins(
-        'notifications.backend.passwordChangedTitle',
-        'notifications.backend.passwordChangedBody',
-        'password-changed',
-        'passwordChanged',
-        {
-          userName: user.name || user.email,
-          userEmail: user.email
-        }
-      ).catch(err => error('[AuthExtended] Failed to send password change notification:', err));
-    }
+    // Invalidate every session for this user (including other devices / stolen cookies)
+    await destroySessionsForUser(
+      req.sessionStore as any,
+      userId,
+      user.email,
+      'change-password'
+    );
 
-    res.json({ success: true });
+    // Send push notification to all admins
+    await notifyAllAdmins(
+      'notifications.backend.passwordChangedTitle',
+      'notifications.backend.passwordChangedBody',
+      'password-changed',
+      'passwordChanged',
+      {
+        userName: user.name || user.email,
+        userEmail: user.email
+      }
+    ).catch(err => error('[AuthExtended] Failed to send password change notification:', err));
+
+    // Force re-login on the current client as well
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        error('[AuthExtended] Failed to destroy current session after password change:', destroyErr);
+        // Password already updated and other sessions wiped; still report success
+        return res.json({ success: true, requiresReauth: true });
+      }
+      res.json({ success: true, requiresReauth: true });
+    });
   } catch (err) {
     error('[AuthExtended] Password change error:', err);
     res.status(500).json({ error: 'Password change failed' });
@@ -1013,6 +1138,7 @@ router.post('/mfa/verify-setup', requireAuth, async (req: Request, res: Response
 
 /**
  * Disable MFA
+ * Requires step-up reauth: password if set, else passkey assertion or recent login.
  */
 router.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -1020,16 +1146,15 @@ router.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
-    const { password } = req.body;
 
     const user = getUserById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Verify password before disabling MFA
-    if (user.password_hash && !verifyPassword(user, password)) {
-      return res.status(401).json({ error: 'Invalid password' });
+    const reauthOk = await requireSensitiveReauth(req, res, user);
+    if (!reauthOk) {
+      return;
     }
 
     disableMFA(userId);
@@ -1062,6 +1187,7 @@ router.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => 
 
 /**
  * Get new backup codes
+ * Requires step-up reauth: password if set, else passkey assertion or recent login.
  */
 router.post('/mfa/backup-codes', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -1069,16 +1195,15 @@ router.post('/mfa/backup-codes', requireAuth, async (req: Request, res: Response
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
-    const { password } = req.body;
 
     const user = getUserById(userId);
     if (!user || !user.mfa_enabled) {
       return res.status(400).json({ error: 'MFA is not enabled' });
     }
 
-    // Verify password
-    if (user.password_hash && !verifyPassword(user, password)) {
-      return res.status(401).json({ error: 'Invalid password' });
+    const reauthOk = await requireSensitiveReauth(req, res, user);
+    if (!reauthOk) {
+      return;
     }
 
     // Generate new backup codes
@@ -1217,36 +1342,54 @@ router.post('/passkey/register-verify', requireAuth, async (req: Request, res: R
 });
 
 /**
- * Get authentication options for passkey login
+ * Generate passkey options for step-up reauth (sensitive actions while already logged in).
+ * Challenge is stored under passkey-reauth-${sessionId} and consumed by requireSensitiveReauth.
+ */
+router.post('/passkey/reauth-options', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const user = getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!userHasPasskeys(user)) {
+      return res.status(400).json({
+        error: 'No passkeys registered',
+        code: 'no_passkeys',
+      });
+    }
+
+    const options = await generatePasskeyAuthenticationOptions(user.passkeys || []);
+    const sessionId = crypto.randomUUID();
+    challenges.set(`passkey-reauth-${sessionId}`, {
+      challenge: options.challenge,
+      userId,
+      expires: Date.now() + 5 * 60 * 1000,
+    });
+
+    res.json({ ...options, sessionId });
+  } catch (err) {
+    error('[AuthExtended] Passkey reauth options error:', err);
+    res.status(500).json({ error: 'Failed to generate reauth options' });
+  }
+});
+
+/**
+ * Get authentication options for passkey login.
+ *
+ * Public endpoint: always returns discoverable (empty allowCredentials) options
+ * with a constant shape. Never looks up users by email — that would enable
+ * account enumeration and credential-ID harvest for phishing.
  */
 router.post('/passkey/auth-options', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-    
-    // If email provided, get user's passkeys
-    let passkeys: any[] = [];
-    if (email) {
-      const user = getUserByEmail(email);
-      if (user && user.passkeys) {
-        passkeys = user.passkeys;
-        info('[Passkey Auth] Found user with passkeys:', {
-          email,
-          passkeyCount: passkeys.length,
-          passkeys: passkeys.map(pk => ({
-            id: pk.id,
-            name: pk.name,
-            credentialIDLength: pk.credentialID?.length,
-            transports: pk.transports
-          }))
-        });
-      } else {
-        info('[Passkey Auth] User not found or has no passkeys:', email);
-      }
-    } else {
-      info('[Passkey Auth] No email provided, returning empty allowCredentials');
-    }
-
-    const options = await generatePasskeyAuthenticationOptions(passkeys);
+    // Ignore email/body for enumeration resistance; client may still send email.
+    const options = await generatePasskeyAuthenticationOptions([]);
 
     // Store challenge
     const sessionId = crypto.randomUUID();
@@ -1287,6 +1430,11 @@ router.post('/passkey/auth-verify', async (req: Request, res: Response) => {
 
     const { user, passkey } = result;
 
+    // Reject disabled accounts (same guard as password /login)
+    if (!user.is_active) {
+      return res.status(401).json({ error: 'Account is disabled' });
+    }
+
     // Verify authentication
     const verification = await verifyPasskeyAuthentication(
       credential,
@@ -1303,44 +1451,52 @@ router.post('/passkey/auth-verify', async (req: Request, res: Response) => {
     updatePasskeyCounter(user.id, passkey.id, verification.authenticationInfo.newCounter);
     challenges.delete(`passkey-auth-${sessionId}`);
 
-    // Create session
-    (req.session as any).userId = user.id;
-    (req.session as any).user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      picture: user.picture,
-      role: user.role,
-      mfa_enabled: user.mfa_enabled,
-      passkey_enabled: user.passkeys && user.passkeys.length > 0,
-      auth_methods: user.auth_methods,
-    };
-
-    info('[Passkey Login] Creating session for user:', {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      mfa_enabled: user.mfa_enabled,
-      sessionID: req.sessionID,
-    });
-
-    // Save session explicitly
-    req.session.save((err) => {
-      if (err) {
-        error('[Passkey Login] Session save error:', err);
+    // Create session — regenerate ID before privilege elevation (session fixation)
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        error('[Passkey Login] Session regenerate error:', regenErr);
         return res.status(500).json({ error: 'Session creation failed' });
       }
 
-      info('[Passkey Login] ✅ Session saved successfully');
-      
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          picture: user.picture,
-        },
+      (req.session as any).userId = user.id;
+      (req.session as any).authenticatedAt = Date.now();
+      (req.session as any).user = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        role: user.role,
+        mfa_enabled: user.mfa_enabled,
+        passkey_enabled: user.passkeys && user.passkeys.length > 0,
+        auth_methods: user.auth_methods,
+      };
+
+      info('[Passkey Login] Creating session for user:', {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        mfa_enabled: user.mfa_enabled,
+        sessionID: req.sessionID,
+      });
+
+      // Save session explicitly
+      req.session.save((err) => {
+        if (err) {
+          error('[Passkey Login] Session save error:', err);
+          return res.status(500).json({ error: 'Session creation failed' });
+        }
+
+        info('[Passkey Login] ✅ Session saved successfully');
+
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            picture: user.picture,
+          },
+        });
       });
     });
   } catch (err) {
@@ -1429,8 +1585,9 @@ router.delete('/passkey/:id', requireAuth, async (req: Request, res: Response) =
 
 /**
  * List all users (admin only)
+ * Does not return invite_token — use GET /users/:userId/invite-link for copy-link.
  */
-router.get('/users', requireAuth, (req: Request, res: Response) => {
+router.get('/users', requireAdmin, (req: Request, res: Response) => {
   try {
     const users = getAllUsers();
     
@@ -1438,7 +1595,6 @@ router.get('/users', requireAuth, (req: Request, res: Response) => {
     const sanitizedUsers = users.map((user: User) => {
       // Determine display status based on user state
       let displayStatus = null;
-      let inviteToken = null;
       
       if (user.status === 'invited') {
         // Check if invite has expired
@@ -1452,9 +1608,6 @@ router.get('/users', requireAuth, (req: Request, res: Response) => {
         } else {
           displayStatus = 'invited';
         }
-        
-        // Include invite token for invited/expired users (needed for copy link functionality)
-        inviteToken = user.invite_token;
       }
       
       return {
@@ -1467,7 +1620,6 @@ router.get('/users', requireAuth, (req: Request, res: Response) => {
         passkey_count: user.passkeys?.length || 0,
         is_active: user.is_active,
         status: displayStatus, // Only show status if invited or expired
-        invite_token: inviteToken, // Include for invited users
         created_at: user.created_at,
         last_login_at: user.last_login_at,
       };
@@ -1477,6 +1629,36 @@ router.get('/users', requireAuth, (req: Request, res: Response) => {
   } catch (err) {
     error('[AuthExtended] List users error:', err);
     res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+/**
+ * Get invite URL for an invited user (admin only — copy-link; never bulk-list tokens)
+ */
+router.get('/users/:userId/invite-link', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user id' });
+    }
+
+    const user = getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.status !== 'invited' && user.status !== 'invite_expired') {
+      return res.status(400).json({ error: 'User has no pending invitation' });
+    }
+
+    if (!user.invite_token) {
+      return res.status(404).json({ error: 'Invitation token not found' });
+    }
+
+    res.json({ inviteUrl: generateInvitationUrl(user.invite_token) });
+  } catch (err) {
+    error('[AuthExtended] Get invite link error:', err);
+    res.status(500).json({ error: 'Failed to get invitation link' });
   }
 });
 
@@ -1522,32 +1704,15 @@ router.delete('/users/:userId', requireAdmin, async (req: Request, res: Response
       }
     ).catch(err => error('[AuthExtended] Failed to send user deletion notification:', err));
     
-    // Invalidate all sessions for this user
-    const sessionStore = req.sessionStore;
-    if (sessionStore && sessionStore.all) {
-      sessionStore.all((err: Error | null, sessions: any) => {
-        if (err) {
-          error('[AuthExtended] Failed to getting sessions:', err);
-          return;
-        }
-        
-        // Destroy sessions belonging to the deleted user
-        if (sessions) {
-          Object.keys(sessions).forEach((sid) => {
-            const session = sessions[sid];
-            if (session?.passport?.user === userId) {
-              sessionStore.destroy(sid, (destroyErr) => {
-                if (destroyErr) {
-                  error(`Failed to destroy session ${sid}:`, destroyErr);
-                } else {
-                  info(`[Session] Destroyed session ${sid} for deleted user ${userId}`);
-                }
-              });
-            }
-          });
-        }
-      });
-    }
+    // Invalidate all sessions for this user (credential userId + passport email).
+    // Passport stores session.passport.user as { id: googleProfileId, email, ... }
+    // — never compare the whole object to the DB numeric id (handled in matcher).
+    await destroySessionsForUser(
+      req.sessionStore as any,
+      userId,
+      targetUser.email,
+      'user-deleted'
+    );
     
     info(`[User Management] User ${targetUser.email} (ID: ${userId}) deleted by user ID: ${currentUserId}`);
     

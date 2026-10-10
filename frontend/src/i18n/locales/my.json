@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "ရက်စွဲ ရိုက်ကူးခဲ့သည်",
     "resolution": "ရုပ်ထွက်",
-    "duration": "ကြာချိန်"
+    "duration": "ကြာချိန်",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "ရုပ်ထွက်",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "ဒီအယ်လ်ဘမ်ကို အများပြည်သူ ဂယ်လရီတွင် ပြပါ။",
     "folderControlsPublished": "ဒီအယ်လ်ဘမ်သည် ၎င်း၏ဖိုလ်ဒါမှ ထုတ်ဝေထားသော အခြေအနေကို အမွေဆက်ခံသည်။",
     "homepageVisibilityDescription": "ဒီအယ်လ်ဘမ်၏ ဓာတ်ပုံများကို မူလစာမျက်နှာတွင် ထည့်ပါ။",
-    "downloadsVisibilityDescription": "ဧည့်သည်များကို ဒီအယ်လ်ဘမ်မှ အပြည့်အဝ အရွယ်အစား အထူးပြုလုပ်ထားသော ဓာတ်ပုံများကို ဒေါင်းလုဒ်လုပ်ရန် ခွင့်ပြုပါ။"
+    "downloadsVisibilityDescription": "ဧည့်သည်များကို ဒီအယ်လ်ဘမ်မှ အပြည့်အဝ အရွယ်အစား အထူးပြုလုပ်ထားသော ဓာတ်ပုံများကို ဒေါင်းလုဒ်လုပ်ရန် ခွင့်ပြုပါ။",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} ဆက်တင်များ သိမ်းဆည်းပြီးပါပြီ!",
@@ -1005,7 +1016,20 @@
     "custom": "စိတ်ကြိုက်...",
     "generate": "ဖန်တီးပါ",
     "invalidCustomTime": "ကျေးဇူးပြု၍ မှန်ကန်သော မိနစ်အရေအတွက်ကို ထည့်ပါ",
-    "copied": "✓ ကူးယူပြီး!"
+    "copied": "✓ ကူးယူပြီး!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "ဗီဒီယိုမျှဝေပါ",

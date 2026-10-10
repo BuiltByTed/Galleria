@@ -9,9 +9,10 @@ import { API_URL } from '../../../../config';
 import { createPortal } from 'react-dom';
 import ShareModal from '../../ShareModal';
 import MoveToFolderModal from './MoveToFolderModal';
+import MoveToAlbumModal from './MoveToAlbumModal';
 import { Photo, Folder } from '../types';
 import { cacheBustValue } from '../../../../config';
-import { MagicWandIcon } from '../../../icons';
+import { MagicWandIcon, FolderArrowIcon } from '../../../icons';
 import { error } from '../../../../utils/logger';
 import VideoThumbnailPicker from './VideoThumbnailPicker';
 
@@ -38,6 +39,16 @@ interface ModalsCollectionProps {
   setEditDescriptionValue: (value: string) => void;
   handleCloseEditModal: () => void;
   handleSaveTitle: () => void;
+  onOpenMoveFromEdit?: () => void;
+
+  // Move Photo to Album Modal
+  showMoveToAlbumModal?: boolean;
+  movePhotoAlbum?: string | null;
+  movePhotoFilename?: string | null;
+  movePhotoTitle?: string;
+  setShowMoveToAlbumModal?: (show: boolean) => void;
+  handleMovePhotoToAlbum?: (destinationAlbum: string) => void;
+  isMovingPhoto?: boolean;
   
   // Rename Album Modal
   showRenameModal: boolean;
@@ -112,6 +123,16 @@ const ModalsCollection: React.FC<ModalsCollectionProps> = ({
   setEditDescriptionValue,
   handleCloseEditModal,
   handleSaveTitle,
+  onOpenMoveFromEdit,
+
+  // Move Photo to Album Modal
+  showMoveToAlbumModal = false,
+  movePhotoAlbum = null,
+  movePhotoFilename = null,
+  movePhotoTitle = '',
+  setShowMoveToAlbumModal,
+  handleMovePhotoToAlbum,
+  isMovingPhoto = false,
   
   // Rename Album Modal
   showRenameModal,
@@ -381,7 +402,24 @@ const ModalsCollection: React.FC<ModalsCollectionProps> = ({
               </div>
             </div>
             
-            <div className="edit-modal-footer">
+            <div className="edit-modal-footer" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              {onOpenMoveFromEdit && (
+                <button
+                  onClick={onOpenMoveFromEdit}
+                  className="btn-secondary"
+                  type="button"
+                  style={{
+                    flex: '1 1 100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <FolderArrowIcon width="16" height="16" />
+                  {t('albumsManager.moveToAlbum')}
+                </button>
+              )}
               <button 
                 onClick={handleCloseEditModal}
                 className="btn-secondary"
@@ -399,6 +437,20 @@ const ModalsCollection: React.FC<ModalsCollectionProps> = ({
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Move Photo to Album Modal */}
+      {showMoveToAlbumModal && movePhotoAlbum && movePhotoFilename && setShowMoveToAlbumModal && handleMovePhotoToAlbum && createPortal(
+        <MoveToAlbumModal
+          photoTitle={movePhotoTitle || ''}
+          filename={movePhotoFilename}
+          currentAlbum={movePhotoAlbum}
+          albums={localAlbums}
+          onClose={() => !isMovingPhoto && setShowMoveToAlbumModal(false)}
+          onMoveToAlbum={handleMovePhotoToAlbum}
+          isMoving={isMovingPhoto}
+        />,
         document.body
       )}
 

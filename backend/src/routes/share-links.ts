@@ -10,6 +10,7 @@ import {
   createShareLink, 
   getShareLinkBySecret, 
   isShareLinkExpired,
+  deleteShareLink,
   deleteShareLinksForAlbum,
   getShareLinksForAlbum
 } from "../database.js";
@@ -248,6 +249,39 @@ router.delete("/album/:album", csrfProtection, requireManager, async (req: Reque
   } catch (err) {
     error('[ShareLinks] Failed to delete share links:', err);
     res.status(500).json({ error: 'Failed to delete share links' });
+  }
+});
+
+/**
+ * Delete a single share link by id (admin only)
+ * DELETE /api/share-links/:id
+ */
+router.delete("/:id", csrfProtection, requireManager, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      res.status(400).json({ error: 'Invalid share link id' });
+      return;
+    }
+
+    const deleted = deleteShareLink(id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Share link not found' });
+      return;
+    }
+
+    info(`[ShareLinks] Deleted share link id=${id}`);
+
+    const { cancelShareLinkExpiryTimer } = await import('../services/share-link-expiry-tracker.js');
+    cancelShareLinkExpiryTimer(id);
+
+    res.json({
+      success: true,
+      deletedId: id
+    });
+  } catch (err) {
+    error('[ShareLinks] Failed to delete share link:', err);
+    res.status(500).json({ error: 'Failed to delete share link' });
   }
 });
 

@@ -78,6 +78,116 @@ body:has(.modal-overlay) {
   line-height: 1.6;
 }
 
+.share-links-section {
+  margin-bottom: 1.5rem;
+}
+
+.share-create-section {
+  border-top: 1px solid #3a3a3a;
+  padding-top: 1.25rem;
+}
+
+.share-links-heading {
+  margin: 0 0 0.75rem;
+  color: #e5e7eb;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.share-links-empty {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 0.75rem;
+  background-color: #1e1e1e;
+  border: 1px dashed #3a3a3a;
+  border-radius: 8px;
+}
+
+.share-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.share-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem;
+  background-color: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+}
+
+.share-link-row--expired {
+  opacity: 0.7;
+}
+
+.share-link-meta {
+  flex: 1;
+  min-width: 160px;
+}
+
+.share-link-meta-line {
+  color: #d1d5db;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.share-link-meta-label {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.share-link-row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.share-link-action-btn {
+  padding: 0.5rem 0.875rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.share-link-copy-btn {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+.share-link-copy-btn:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.share-link-revoke-btn {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.share-link-revoke-btn:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+}
+
+.share-link-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Video share specific styles */
 .video-share-info {
   background-color: #1e1e1e;
@@ -464,6 +574,19 @@ body:has(.modal-overlay) {
 @media (max-width: 768px) {
   .security-setup-modal {
     max-height: calc(91vh - 54px);
+  }
+
+  .share-link-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .share-link-row-actions {
+    width: 100%;
+  }
+
+  .share-link-action-btn {
+    flex: 1;
   }
 }
 

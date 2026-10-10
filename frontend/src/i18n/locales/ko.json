@@ -104,7 +104,11 @@
     "noContentYet": "아직 콘텐츠가 없습니다",
     "albumEmpty": "이 앨범은 비어 있습니다. 콘텐츠를 추가하려면 로그인하세요.",
     "homepageEmpty": "앨범을 추가하거나 홈페이지 토글을 사용하여 홈페이지에 추가하세요.",
-    "goToAdminPanel": "관리자 패널로 이동"
+    "goToAdminPanel": "관리자 패널로 이동",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "슬라이드쇼 재생",
+    "pauseSlideshow": "슬라이드쇼 일시정지"
   },
   "video": {
     "resolution": "해상도",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "이 앨범을 공개 갤러리에 표시합니다.",
     "folderControlsPublished": "이 앨범은 폴더에서 게시 상태를 상속받습니다.",
     "homepageVisibilityDescription": "이 앨범의 사진을 홈페이지에 포함합니다.",
-    "downloadsVisibilityDescription": "방문자가 이 앨범에서 전체 크기로 최적화된 사진을 다운로드할 수 있도록 허용합니다."
+    "downloadsVisibilityDescription": "방문자가 이 앨범에서 전체 크기로 최적화된 사진을 다운로드할 수 있도록 허용합니다.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} 설정이 저장되었습니다!",
@@ -913,7 +924,20 @@
     "custom": "사용자 정의...  ",
     "generate": "생성  ",
     "invalidCustomTime": "유효한 분 수를 입력하세요  ",
-    "copied": "✓ 복사됨!  "
+    "copied": "✓ 복사됨!  ",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "비디오 공유",

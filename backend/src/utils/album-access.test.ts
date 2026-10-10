@@ -20,10 +20,15 @@ interface AccessResult {
 
 interface AlbumAccessModule {
   getAlbumAccess(req: Request, albumName: string): AccessResult;
+  isRequestAuthenticated(req: Request): boolean;
 }
 
 interface RequestOptions {
   authenticated?: boolean;
+  /** Credential session userId override (defaults to active test user) */
+  userId?: number;
+  /** Passport-style session: isAuthenticated + req.user.email */
+  passportEmail?: string;
   key?: string;
 }
 
@@ -34,11 +39,26 @@ let albumsRouter: Router;
 let generateStaticJSONFiles: (appRoot: string) => Promise<{ success: boolean; error?: string; albumCount?: number }>;
 let shareKey = '';
 let expiredShareKey = '';
+let activeUserId = 0;
+let inactiveUserId = 0;
+const activeUserEmail = 'active@example.com';
+const inactiveUserEmail = 'inactive@example.com';
+const deletedUserEmail = 'deleted@example.com';
 
 function request(options: RequestOptions = {}): Request {
+  if (options.passportEmail) {
+    return {
+      isAuthenticated: () => true,
+      user: { id: 'google-profile-id', email: options.passportEmail },
+      session: { passport: { user: { id: 'google-profile-id', email: options.passportEmail } } },
+      query: options.key ? { key: options.key } : {},
+    } as unknown as Request;
+  }
+
+  const userId = options.userId ?? activeUserId;
   return {
     isAuthenticated: () => Boolean(options.authenticated),
-    session: options.authenticated ? { userId: 1 } : {},
+    session: options.authenticated ? { userId } : {},
     query: options.key ? { key: options.key } : {},
   } as unknown as Request;
 }
@@ -51,7 +71,7 @@ function createRouteApp(): Express {
   app.use((req, _res, next) => {
     const authenticated = req.get('x-test-auth') === '1';
     (req as any).isAuthenticated = () => authenticated;
-    (req as any).session = authenticated ? { userId: 1 } : {};
+    (req as any).session = authenticated ? { userId: activeUserId } : {};
     next();
   });
   app.use('/api/image-metadata', imageMetadataRouter);
@@ -127,13 +147,71 @@ test.before(async () => {
   ]);
 
   const database = await import('../database.js');
+  const databaseUsers = await import('../database-users.js');
   albumAccess = await import('./album-access.js');
   imageMetadataRouter = (await import('../routes/image-metadata.js')).default;
   previewGridRouter = (await import('../routes/preview-grid.js')).default;
   albumsRouter = (await import('../routes/albums.js')).default;
   ({ generateStaticJSONFiles } = await import('../routes/static-json.js'));
 
-  database.initializeDatabase();
+  const db = database.initializeDatabase();
+  // Users table is normally created during setup; create it here for auth checks
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT,
+      auth_methods TEXT NOT NULL DEFAULT '["google"]',
+      mfa_enabled INTEGER NOT NULL DEFAULT 0,
+      totp_secret TEXT,
+      backup_codes TEXT,
+      passkeys TEXT,
+      google_id TEXT UNIQUE,
+      name TEXT,
+      picture TEXT,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      invite_token TEXT UNIQUE,
+      invite_expires_at TEXT,
+      password_reset_token TEXT UNIQUE,
+      password_reset_expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_login_at TEXT
+    )
+  `);
+
+  const activeUser = databaseUsers.createUser({
+    email: activeUserEmail,
+    name: 'Active User',
+    auth_methods: ['password'],
+    email_verified: true,
+    role: 'viewer',
+  });
+  activeUserId = activeUser.id;
+
+  const inactiveUser = databaseUsers.createUser({
+    email: inactiveUserEmail,
+    name: 'Inactive User',
+    auth_methods: ['password'],
+    email_verified: true,
+    role: 'viewer',
+  });
+  inactiveUserId = inactiveUser.id;
+  databaseUsers.updateUser(inactiveUserId, { is_active: false });
+
+  // Create then delete so isRequestAuthenticated rejects leftover sessions
+  const deletedUser = databaseUsers.createUser({
+    email: deletedUserEmail,
+    name: 'Deleted User',
+    auth_methods: ['password'],
+    email_verified: true,
+    role: 'viewer',
+  });
+  databaseUsers.deleteUser(deletedUser.id);
+
   database.saveAlbum('Published', true);
   database.saveAlbum('Private', false);
   database.saveAlbum('OtherPrivate', false);
@@ -166,6 +244,46 @@ test('allows authenticated access to unpublished albums', () => {
 
   assert.equal(access.allowed, true);
   assert.equal(access.reason, 'authenticated');
+});
+
+test('isRequestAuthenticated accepts live credential and passport sessions', () => {
+  assert.equal(albumAccess.isRequestAuthenticated(request({ authenticated: true })), true);
+  assert.equal(albumAccess.isRequestAuthenticated(request({ passportEmail: activeUserEmail })), true);
+  assert.equal(albumAccess.isRequestAuthenticated(request()), false);
+});
+
+test('isRequestAuthenticated rejects deleted or inactive user sessions', () => {
+  // Stale credential session pointing at a deleted user id
+  assert.equal(
+    albumAccess.isRequestAuthenticated(request({ authenticated: true, userId: 99999 })),
+    false
+  );
+
+  // Inactive account still has a cookie
+  assert.equal(
+    albumAccess.isRequestAuthenticated(request({ authenticated: true, userId: inactiveUserId })),
+    false
+  );
+
+  // Passport session whose email no longer maps to a user
+  assert.equal(
+    albumAccess.isRequestAuthenticated(request({ passportEmail: deletedUserEmail })),
+    false
+  );
+
+  // Passport session for deactivated account
+  assert.equal(
+    albumAccess.isRequestAuthenticated(request({ passportEmail: inactiveUserEmail })),
+    false
+  );
+
+  // Content path must deny unpublished album for deleted-user session
+  const deletedAccess = albumAccess.getAlbumAccess(
+    request({ authenticated: true, userId: 99999 }),
+    'Private'
+  );
+  assert.equal(deletedAccess.allowed, false);
+  assert.equal(deletedAccess.reason, 'denied');
 });
 
 test('allows share-link access only for the matching unexpired album', () => {

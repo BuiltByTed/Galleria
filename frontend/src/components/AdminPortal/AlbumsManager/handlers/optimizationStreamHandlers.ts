@@ -3,10 +3,11 @@
  * Connects to single SSE endpoint for all optimization updates
  */
 
-import { UploadingImage, Photo } from '../types';
+import { UploadingImage } from '../types';
 import { API_URL } from '../../../../config';
 import { trackPhotoUploaded } from '../../../../utils/analytics';
 import { error as logError, warn, info } from '../../../../utils/logger';
+import { applyCompleteOptimizationUpdate } from './optimizationStreamState';
 
 
 interface OptimizationStreamHandlersProps {
@@ -122,31 +123,16 @@ export const createOptimizationStreamHandlers = (props: OptimizationStreamHandle
               // Complete
               if (state === 'complete') {
                 info(`[Optimization Stream] ✅ Marking ${filename} as complete`);
-                
-                // Determine if this is a video based on extension
-                const isVideo = /\.(mp4|mov|avi|mkv|webm)$/i.test(filename);
-                const mediaType = isVideo ? 'video' : 'photo';
-                
-                // For videos, thumbnails are JPG files
-                const thumbnailFilename = isVideo ? filename.replace(/\.[^.]+$/, '.jpg') : filename;
-                
-                const completedPhoto: Photo = {
-                  id: `${album}/${filename}`,
-                  thumbnail: `/optimized/thumbnail/${encodeURIComponent(album)}/${encodeURIComponent(thumbnailFilename)}`,
-                  modal: `/optimized/modal/${encodeURIComponent(album)}/${encodeURIComponent(thumbnailFilename)}`,
-                  download: isVideo ? '' : `/optimized/download/${encodeURIComponent(album)}/${encodeURIComponent(filename)}`,
-                  title: title || '',
-                  album: album,
-                  media_type: mediaType
-                };
 
                 trackPhotoUploaded(album, 1, [filename]);
 
-                return {
-                  ...img,
-                  state: 'complete',
-                  photo: completedPhoto
-                };
+                return applyCompleteOptimizationUpdate(img, {
+                  state,
+                  album,
+                  filename,
+                  title,
+                  error
+                });
               }
 
               // Error
@@ -209,4 +195,3 @@ export const createOptimizationStreamHandlers = (props: OptimizationStreamHandle
     disconnectOptimizationStream
   };
 };
-

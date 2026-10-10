@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Hartze Data",
     "resolution": "Bereizmena",
-    "duration": "Iraupena"
+    "duration": "Iraupena",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Bereizmena",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Erakutsi album hau galeria publikoan.",
     "folderControlsPublished": "Album honek bere karpetatik argitaratutako egoera heredatzen du.",
     "homepageVisibilityDescription": "Sartu album honen argazkiak hasierako orrian.",
-    "downloadsVisibilityDescription": "Baimendu bisitariei album honetako tamaina osoko argazki optimizatuak deskargatzea."
+    "downloadsVisibilityDescription": "Baimendu bisitariei album honetako tamaina osoko argazki optimizatuak deskargatzea.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}} ezarpenak gorde dira!",
@@ -1005,7 +1016,20 @@
     "custom": "Pertsonalizatua...",
     "generate": "Sortu",
     "invalidCustomTime": "Mesedez, sartu minutu kopuru baliodun bat",
-    "copied": "✓ Kopiatuta!"
+    "copied": "✓ Kopiatuta!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Bideoa partekatu",

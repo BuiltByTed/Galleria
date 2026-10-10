@@ -124,7 +124,11 @@
     "iso": "ISO",
     "dateTaken": "Дата на заснемане",
     "resolution": "Резолюция",
-    "duration": "Продължителност"
+    "duration": "Продължителност",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "Резолюция",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "Показване на този албум в публичната галерия.",
     "folderControlsPublished": "Този албум наследява статуса на публикуване от своята папка.",
     "homepageVisibilityDescription": "Включване на снимките от този албум на началната страница.",
-    "downloadsVisibilityDescription": "Позволяване на посетителите да изтеглят оптимизирани снимки в пълен размер от този албум."
+    "downloadsVisibilityDescription": "Позволяване на посетителите да изтеглят оптимизирани снимки в пълен размер от този албум.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Настройките на {{section}} са запазени!",
@@ -1005,7 +1016,20 @@
     "custom": "Персонализирано...",
     "generate": "Генерирай",
     "invalidCustomTime": "Моля, въведете валиден брой минути",
-    "copied": "✓ Копирано!"
+    "copied": "✓ Копирано!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Сподели видео",

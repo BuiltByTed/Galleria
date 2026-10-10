@@ -25,12 +25,13 @@ import config, {
   PHOTOS_DIR,
   OPTIMIZED_DIR,
   DATA_DIR,
-  getAllowedOrigins,
   getConfigExists,
+  isOriginAllowed,
   RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_MAX_REQUESTS,
   getLogLevel,
   isEnvSet,
+  getCurrentConfig,
 } from "./config.ts";
 import { validateProductionSecurity } from "./security.ts";
 import { initializeDatabase } from "./database.ts";
@@ -46,6 +47,7 @@ import {
   trace,
 } from "./utils/logger.ts";
 import { getAlbumAccess, isRequestAuthenticated } from "./utils/album-access.ts";
+import { getSessionCookieDomain } from "./utils/session-cookie-domain.ts";
 
 // Initialize logger early with config or environment variable
 initLogger(getLogLevel());
@@ -277,55 +279,8 @@ app.use(
       // Allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
 
-      // Get current state (dynamic, updates after config changes)
-      const configExists = getConfigExists();
-      const allowedOrigins = getAllowedOrigins();
-
-      // During OOBE (setup mode), allow any HTTPS origin to enable setup from any domain
-      if (!configExists && origin.startsWith("https://")) {
-        trace(`[OOBE] Allowing CORS from: ${origin}`);
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
-      }
-
-      // Check exact matches first
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-        return;
-      }
-
-      // Allow localhost on any port (for development)
-      try {
-        const url = new URL(origin);
-        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-          callback(null, true);
-          return;
-        }
-      } catch (e) {
-        // Invalid URL, continue to other checks
-      }
-
-      // Allow any IP address on ports 3000 and 3001 (for Docker direct access)
-      // Pattern: http://<any-ip>:3000 or http://<any-ip>:3001
-      try {
-        const url = new URL(origin);
-        const port = url.port
-          ? parseInt(url.port)
-          : url.protocol === "https:"
-          ? 443
-          : 80;
-
-        // Check if hostname is an IP address (IPv4 pattern)
-        const hostname = url.hostname;
-        const ipPattern = /^\d+\.\d+\.\d+\.\d+$/;
-        const isIpAddress = ipPattern.test(hostname);
-
-        if (isIpAddress && (port === 3000 || port === 3001)) {
-          trace(`[CORS] Allowing IP-based access: ${origin}`);
-          callback(null, true);
-          return;
-        }
-      } catch (e) {
-        // Invalid URL, continue to rejection
       }
 
       // Reject origin by passing false (not an Error)
@@ -382,10 +337,27 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true, // Don't count successful logins
 });
 
+// Passkey bootstrap routes always (or often) return 2xx with challenge material.
+// authLimiter's skipSuccessfulRequests would never increment on auth-options
+// (always 200) and under-count verify abuse — count every response by IP.
+const passkeyAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message:
+    "Too many authentication attempts from this IP, please try again after 15 minutes.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Count all outcomes — required for public challenge issuance
+  skipSuccessfulRequests: false,
+});
+
 app.use("/api/", limiter);
 // Apply stricter rate limiting to authentication endpoints
 app.use("/api/auth-extended/login", authLimiter);
 app.use("/api/auth-extended/password-reset", authLimiter);
+// Public passkey login bootstrap — rate-limit by IP, all responses (ticket #3444)
+app.use("/api/auth-extended/passkey/auth-options", passkeyAuthLimiter);
+app.use("/api/auth-extended/passkey/auth-verify", passkeyAuthLimiter);
 app.use("/api/auth/google", authLimiter);
 
 // Parse JSON request bodies with size limit
@@ -406,21 +378,6 @@ if (!sessionSecret) {
   }
 }
 
-// Helper to extract base domain from hostname (e.g., 'api.example.com' -> '.example.com')
-function getBaseDomain(hostname: string): string | undefined {
-  const parts = hostname.split(".");
-  if (parts.length >= 2) {
-    return "." + parts.slice(-2).join(".");
-  }
-  return undefined;
-}
-
-// Helper to check if hostname is an IP address or localhost
-function isLocalOrIP(hostname: string): boolean {
-  const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-  return hostname === "localhost" || hostname === "127.0.0.1" || isIpAddress;
-}
-
 // Initialize SQLite session store
 const db = initializeDatabase();
 const SqliteStore = SqliteStoreFactory(session);
@@ -437,7 +394,7 @@ app.use((req: Request, res: Response, next) => {
   // Store computed values on request for session middleware to use
   (req as any).__cookieSecure = isSecure;
   (req as any).__cookieSameSite = isSecure ? "lax" : false;
-  (req as any).__cookieDomain = isLocalOrIP(host) ? undefined : getBaseDomain(host);
+  (req as any).__cookieDomain = getSessionCookieDomain(host);
 
   debug(`[Session Cookie] host=${host}, secure=${isSecure}, domain=${(req as any).__cookieDomain}`);
   next();
@@ -445,27 +402,36 @@ app.use((req: Request, res: Response, next) => {
 
 // Session middleware with dynamic cookie configuration
 // Cookie domain and secure flag are set per-request based on how the user accesses the site
-app.use(
-  session({
-    store: new SqliteStore({
-      client: db,
-      expired: {
-        clear: true,
-        intervalMs: 900000, // Clean up expired sessions every 15 minutes
+const sessionStore = new SqliteStore({
+  client: db,
+  expired: {
+    clear: true,
+    intervalMs: 900000, // Clean up expired sessions every 15 minutes
+  },
+});
+let activeSessionSecret: string;
+let sessionMiddleware: ReturnType<typeof session>;
+app.use((req, res, next) => {
+  // OOBE publishes a permanent secret without restarting the container.
+  const secret = process.env.SESSION_SECRET || getCurrentConfig().auth.sessionSecret;
+  if (secret !== activeSessionSecret) {
+    activeSessionSecret = secret;
+    sessionMiddleware = session({
+      store: sessionStore,
+      secret,
+      resave: false,
+      saveUninitialized: false,
+      rolling: true, // Extend sessions during long uploads
+      cookie: {
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,
+        secure: "auto",
+        sameSite: "lax",
       },
-    }),
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true, // Extend session on every request to prevent expiration during long uploads
-    cookie: {
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      secure: "auto" as any, // Will be set dynamically
-      sameSite: "lax" as any,
-    },
-  })
-);
+    });
+  }
+  sessionMiddleware(req, res, next);
+});
 
 // Middleware to apply dynamic cookie options after session is initialized
 app.use((req: Request, res: Response, next) => {
@@ -495,21 +461,26 @@ app.use((req: Request, res: Response, next) => {
     // Clear cookies on all possible domains to handle domain changes
     // This ensures old cookies from different domain configurations are removed
     const hostname = req.hostname;
-    const baseDomain = getBaseDomain(hostname);
+    const cookieDomain = getSessionCookieDomain(hostname);
     const clearCookieOptions = { path: "/", httpOnly: true };
 
     // Clear on exact hostname (e.g., api-docker.tedcharles.net)
     res.clearCookie("connect.sid", { ...clearCookieOptions, domain: hostname });
 
-    // Clear on base domain (e.g., .tedcharles.net)
-    if (baseDomain) {
-      res.clearCookie("connect.sid", { ...clearCookieOptions, domain: baseDomain });
+    // Clear on the registrable domain (e.g., .tedcharles.net)
+    if (cookieDomain) {
+      res.clearCookie("connect.sid", {
+        ...clearCookieOptions,
+        domain: cookieDomain,
+      });
     }
 
     // Clear without explicit domain (browser default)
     res.clearCookie("connect.sid", clearCookieOptions);
 
-    debug(`[Session] Cleared cookies on domains: ${hostname}, ${baseDomain || 'none'}, default`);
+    debug(
+      `[Session] Cleared cookies on domains: ${hostname}, ${cookieDomain || "none"}, default`
+    );
 
     req.session.regenerate((err) => {
       if (err) {

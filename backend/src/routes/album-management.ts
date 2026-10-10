@@ -11,6 +11,7 @@ import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import multer from "multer";
 import os from "os";
+import crypto from "crypto";
 import sharp from "sharp";
 import { csrfProtection } from "../security.js";
 import { requireAuth, requireAdmin, requireManager } from '../auth/middleware.js';
@@ -27,6 +28,8 @@ import {
   setAlbumVisibility,
   updateImageSortOrder,
   saveImageMetadata,
+  moveImageMetadata,
+  getImageMetadata,
   updateAlbumSortOrder,
   getAlbumState,
   getDatabase,
@@ -36,12 +39,16 @@ import {
   renameAlbum
 } from "../database.js";
 import { processVideo, VideoProcessingProgress } from "../utils/video-processor.js";
+import { removeMediaDiskAssets } from "../utils/media-disk-cleanup.js";
+import { moveMediaDiskAssets } from "../utils/move-media-disk.js";
 import { invalidateAlbumCache } from "./albums.js";
 import { generateStaticJSONFiles } from "./static-json.js";
 import { generateHomepageHTML } from "./homepage-html.js";
 import { broadcastOptimizationUpdate, queueOptimizationJob } from "./optimization-stream.js";
 import OpenAI from "openai";
 import { error, warn, info, debug, verbose } from '../utils/logger.js';
+import { rollbackRenamedPaths, type RenamedPath } from '../utils/rename-rollback.js';
+import { publishUploadWithoutOverwrite } from '../utils/publish-upload.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -394,8 +401,10 @@ const upload = multer({
       cb(null, os.tmpdir());
     },
     filename: (req, file, cb) => {
-      // Keep original filename
-      cb(null, file.originalname);
+      // Unique temp name so concurrent same-originalname uploads never share a path.
+      // Album destination still uses file.originalname via sanitizePhotoName.
+      const ext = path.extname(file.originalname);
+      cb(null, `${crypto.randomUUID()}${ext}`);
     }
   }),
   limits: {
@@ -429,6 +438,19 @@ const sanitizeName = (name: string): string | null => {
     return null;
   }
   return name.trim();
+};
+
+/**
+ * Best-effort cleanup of a multer diskStorage temp file.
+ * Safe to call when the path is missing or already unlinked.
+ */
+const unlinkTempUpload = (filePath: string | undefined | null): void => {
+  if (!filePath) return;
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    // Ignore cleanup errors (already moved/deleted, or race)
+  }
 };
 
 /**
@@ -562,9 +584,16 @@ router.post("/", requireManager, async (req: Request, res: Response): Promise<vo
 });
 
 /**
- * Rename an album
+ * Rename an album (FS first, then DB; roll back FS if DB fails or a later FS rename throws).
+ * Shared by PUT and PATCH so the live API surface cannot diverge into a
+ * DB-first path with no rollback (see ticket #2746).
  */
-router.put("/:album/rename", requireManager, async (req: Request, res: Response): Promise<void> => {
+async function handleRenameAlbum(req: Request, res: Response): Promise<void> {
+  // Track successful renames so mid-sequence FS failures can reverse prior moves
+  // (photos/ can succeed while optimized/ or video/ throws — see ticket #3337).
+  const renamedPaths: RenamedPath[] = [];
+  let dbUpdated = false;
+
   try {
     const { album } = req.params;
     const { newName } = req.body;
@@ -609,55 +638,41 @@ router.put("/:album/rename", requireManager, async (req: Request, res: Response)
       return;
     }
     
-    // Rename photos directory
+    // Rename photos directory first — if this fails, DB is untouched
     fs.renameSync(oldAlbumPath, newAlbumPath);
+    renamedPaths.push({ from: oldAlbumPath, to: newAlbumPath });
     info(`[AlbumManagement] Renamed photos directory: ${sanitizedOldName} → ${sanitizedNewName}`);
     
     // Rename optimized directories
-    ['thumbnail', 'modal', 'download'].forEach(dir => {
+    for (const dir of ['thumbnail', 'modal', 'download'] as const) {
       const oldOptimizedPath = path.join(optimizedDir, dir, sanitizedOldName);
       const newOptimizedPath = path.join(optimizedDir, dir, sanitizedNewName);
       if (fs.existsSync(oldOptimizedPath)) {
         fs.renameSync(oldOptimizedPath, newOptimizedPath);
+        renamedPaths.push({ from: oldOptimizedPath, to: newOptimizedPath });
       }
-    });
+    }
     
     // Rename video directory if it exists
     const videoDir = req.app.get("videoDir");
-    let videoRenamed = false;
     if (videoDir) {
       const oldVideoPath = path.join(videoDir, sanitizedOldName);
       const newVideoPath = path.join(videoDir, sanitizedNewName);
       if (fs.existsSync(oldVideoPath)) {
         fs.renameSync(oldVideoPath, newVideoPath);
-        videoRenamed = true;
+        renamedPaths.push({ from: oldVideoPath, to: newVideoPath });
         info(`[AlbumManagement] Renamed video directory: ${sanitizedOldName} → ${sanitizedNewName}`);
       }
     }
     
-    // Update database
+    // Update database after FS; roll FS back if DB fails
     const success = renameAlbum(sanitizedOldName, sanitizedNewName);
     if (!success) {
-      // Rollback filesystem changes
-      fs.renameSync(newAlbumPath, oldAlbumPath);
-      ['thumbnail', 'modal', 'download'].forEach(dir => {
-        const oldOptimizedPath = path.join(optimizedDir, dir, sanitizedOldName);
-        const newOptimizedPath = path.join(optimizedDir, dir, sanitizedNewName);
-        if (fs.existsSync(newOptimizedPath)) {
-          fs.renameSync(newOptimizedPath, oldOptimizedPath);
-        }
-      });
-      // Rollback video directory if it was renamed
-      if (videoRenamed && videoDir) {
-        const oldVideoPath = path.join(videoDir, sanitizedOldName);
-        const newVideoPath = path.join(videoDir, sanitizedNewName);
-        if (fs.existsSync(newVideoPath)) {
-          fs.renameSync(newVideoPath, oldVideoPath);
-        }
-      }
+      rollbackRenamedPaths(renamedPaths);
       res.status(500).json({ errorCode: 'DATABASE_UPDATE_FAILED', error: 'Failed to update database' });
       return;
     }
+    dbUpdated = true;
     
     info(`[AlbumManagement] Renamed album in database: ${sanitizedOldName} → ${sanitizedNewName}`);
     
@@ -671,10 +686,18 @@ router.put("/:album/rename", requireManager, async (req: Request, res: Response)
     
     res.json({ success: true, newName: sanitizedNewName });
   } catch (err) {
+    // Only reverse FS when DB still has the old name — never after a successful renameAlbum.
+    if (!dbUpdated && renamedPaths.length > 0) {
+      warn('[AlbumManagement] Rolling back FS renames after mid-sequence failure');
+      rollbackRenamedPaths(renamedPaths);
+    }
     error('[AlbumManagement] Failed to rename album:', err);
     res.status(500).json({ errorCode: 'RENAME_FAILED', error: 'Failed to rename album' });
   }
-});
+}
+
+router.put("/:album/rename", requireManager, handleRenameAlbum);
+router.patch("/:album/rename", requireManager, handleRenameAlbum);
 
 /**
  * Delete an album and all its photos
@@ -794,6 +817,7 @@ router.delete("/:album/photos/:photo", requireManager, async (req: Request, res:
 
     const photosDir = req.app.get("photosDir");
     const optimizedDir = req.app.get("optimizedDir");
+    const videoDir = req.app.get("videoDir") as string | undefined;
     
     const photoPath = path.join(photosDir, sanitizedAlbum, sanitizedPhoto);
     
@@ -802,16 +826,20 @@ router.delete("/:album/photos/:photo", requireManager, async (req: Request, res:
       return;
     }
 
-    // Delete from photos directory
-    fs.unlinkSync(photoPath);
-
-    // Delete from optimized directories
-    ['thumbnail', 'modal', 'download'].forEach(dir => {
-      const optimizedPath = path.join(optimizedDir, dir, sanitizedAlbum, sanitizedPhoto);
-      if (fs.existsSync(optimizedPath)) {
-        fs.unlinkSync(optimizedPath);
-      }
+    // Original + optimized same-name; for videos also HLS tree and .jpg posters
+    const diskCleanup = removeMediaDiskAssets({
+      photosDir,
+      optimizedDir,
+      videoDir,
+      album: sanitizedAlbum,
+      filename: sanitizedPhoto,
     });
+    if (diskCleanup.hlsRemoved) {
+      info(`[AlbumManagement] Removed HLS assets for video: ${sanitizedAlbum}/${sanitizedPhoto}`);
+    }
+    if (diskCleanup.posterRemoved.length > 0) {
+      info(`[AlbumManagement] Removed video posters: ${diskCleanup.posterRemoved.join(', ')}`);
+    }
 
     // Delete metadata from database
     const deleted = deleteImageMetadata(sanitizedAlbum, sanitizedPhoto);
@@ -837,6 +865,134 @@ router.delete("/:album/photos/:photo", requireManager, async (req: Request, res:
   } catch (err) {
     error('[AlbumManagement] Failed to delete photo:', err);
     res.status(500).json({ error: 'Failed to delete photo' });
+  }
+});
+
+/**
+ * Move a photo/video to another album (original + optimized + video assets).
+ * Preserves title/description; appends to destination sort order.
+ */
+router.post("/:album/photos/:photo/move", requireManager, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { album, photo } = req.params;
+    const destinationAlbumRaw =
+      typeof req.body?.destinationAlbum === "string"
+        ? req.body.destinationAlbum
+        : typeof req.body?.targetAlbum === "string"
+          ? req.body.targetAlbum
+          : "";
+
+    const sanitizedSourceAlbum = sanitizeName(album);
+    const sanitizedDestAlbum = sanitizeName(destinationAlbumRaw);
+    const sanitizedPhoto = sanitizePhotoName(photo);
+
+    if (!sanitizedSourceAlbum || !sanitizedDestAlbum || !sanitizedPhoto) {
+      res.status(400).json({ error: "Invalid album or photo name" });
+      return;
+    }
+
+    if (sanitizedSourceAlbum === sanitizedDestAlbum) {
+      res.status(400).json({ error: "Source and destination albums are the same" });
+      return;
+    }
+
+    const photosDir = req.app.get("photosDir") as string;
+    const optimizedDir = req.app.get("optimizedDir") as string;
+    const videoDir = req.app.get("videoDir") as string | undefined;
+
+    const sourcePath = path.join(photosDir, sanitizedSourceAlbum, sanitizedPhoto);
+    if (!fs.existsSync(sourcePath)) {
+      res.status(404).json({ error: "Photo not found" });
+      return;
+    }
+
+    const destAlbumPath = path.join(photosDir, sanitizedDestAlbum);
+    if (!fs.existsSync(destAlbumPath)) {
+      // Album must already exist (created via admin); refuse silent create
+      const destState = getAlbumState(sanitizedDestAlbum);
+      if (!destState) {
+        res.status(404).json({ error: "Destination album not found" });
+        return;
+      }
+      fs.mkdirSync(destAlbumPath, { recursive: true });
+    }
+
+    const destPath = path.join(destAlbumPath, sanitizedPhoto);
+    if (fs.existsSync(destPath) || getImageMetadata(sanitizedDestAlbum, sanitizedPhoto)) {
+      res.status(409).json({
+        error: "A photo with this filename already exists in the destination album",
+        code: "DESTINATION_EXISTS",
+      });
+      return;
+    }
+
+    // Disk first (with internal rollback on failure)
+    const diskResult = moveMediaDiskAssets({
+      photosDir,
+      optimizedDir,
+      videoDir,
+      fromAlbum: sanitizedSourceAlbum,
+      toAlbum: sanitizedDestAlbum,
+      filename: sanitizedPhoto,
+    });
+
+    // Metadata: move row if present; otherwise create a minimal destination row
+    const sourceMeta = getImageMetadata(sanitizedSourceAlbum, sanitizedPhoto);
+    if (sourceMeta) {
+      const moved = moveImageMetadata(
+        sanitizedSourceAlbum,
+        sanitizedDestAlbum,
+        sanitizedPhoto
+      );
+      if (!moved) {
+        // Roll back disk — destination metadata conflict or race
+        rollbackRenamedPaths(diskResult.movedPaths);
+        res.status(409).json({
+          error: "Failed to update metadata for destination album",
+          code: "METADATA_MOVE_FAILED",
+        });
+        return;
+      }
+    } else {
+      const mediaType = isVideoFile(sanitizedPhoto) ? "video" : "photo";
+      saveImageMetadata(
+        sanitizedDestAlbum,
+        sanitizedPhoto,
+        null,
+        null,
+        mediaType
+      );
+    }
+
+    invalidateAlbumCache(sanitizedSourceAlbum);
+    invalidateAlbumCache(sanitizedDestAlbum);
+
+    const appRoot = req.app.get("appRoot");
+    generateStaticJSONFiles(appRoot);
+
+    const sourceState = getAlbumState(sanitizedSourceAlbum);
+    const destState = getAlbumState(sanitizedDestAlbum);
+    if (sourceState?.show_on_homepage || destState?.show_on_homepage) {
+      info(
+        `[AlbumManagement] Photo moved involving homepage album - regenerating homepage HTML`
+      );
+      generateHomepageHTML(appRoot);
+    }
+
+    info(
+      `[AlbumManagement] Moved photo ${sanitizedPhoto}: ${sanitizedSourceAlbum} → ${sanitizedDestAlbum}` +
+        (diskResult.hlsMoved ? " (with HLS)" : "")
+    );
+
+    res.json({
+      success: true,
+      sourceAlbum: sanitizedSourceAlbum,
+      destinationAlbum: sanitizedDestAlbum,
+      filename: sanitizedPhoto,
+    });
+  } catch (err) {
+    error("[AlbumManagement] Failed to move photo:", err);
+    res.status(500).json({ error: "Failed to move photo" });
   }
 });
 
@@ -879,6 +1035,8 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
     
     const sanitizedAlbum = sanitizeName(album);
     if (!sanitizedAlbum) {
+      // Multer may already have written the file to os.tmpdir()
+      unlinkTempUpload(req.file?.path);
       res.status(400).json({ error: 'Invalid album name' });
       return;
     }
@@ -890,8 +1048,9 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
     }
 
     // SECURITY: Sanitize filename to prevent path traversal attacks
-    const sanitizedFilename = sanitizePhotoName(file.originalname);
-    if (!sanitizedFilename) {
+    const preferredFilename = sanitizePhotoName(file.originalname);
+    if (!preferredFilename) {
+      unlinkTempUpload(file.path);
       res.status(400).json({ error: 'Invalid filename. Use only alphanumeric characters, spaces, hyphens, underscores, and valid image/video extensions.' });
       return;
     }
@@ -900,32 +1059,35 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
     const albumPath = path.join(photosDir, sanitizedAlbum);
     
     if (!fs.existsSync(albumPath)) {
+      unlinkTempUpload(file.path);
       res.status(404).json({ error: 'Album not found' });
       return;
     }
 
-    const destPath = path.join(albumPath, sanitizedFilename);
-    const isVideo = isVideoFile(sanitizedFilename);
+    const isVideo = isVideoFile(preferredFilename);
     const mediaType = isVideo ? 'video' : 'photo';
-    
-    if (isVideo) {
-      // For videos, copy file then delete temp (rename doesn't work across filesystems in Docker)
-      try {
-        await fs.promises.copyFile(file.path, destPath);
-        await fs.promises.unlink(file.path);
-      } catch (err: any) {
-        error(`[Upload] Failed to move video ${file.originalname}:`, err.message);
-        try {
-          fs.unlinkSync(file.path);
-        } catch (cleanupErr) {
-          // Ignore cleanup errors
-        }
-        res.status(500).json({ error: `Failed to save video: ${err.message}` });
-        return;
-      }
-    } else {
-      // For images, use sharp to auto-rotate based on EXIF orientation
-      try {
+    const stagingDir = path.join(
+      albumPath,
+      `.galleria-upload-${crypto.randomUUID()}`
+    );
+    const stagingPath = path.join(
+      stagingDir,
+      `staged${path.extname(preferredFilename)}`
+    );
+
+    let publishedUpload: Awaited<ReturnType<typeof publishUploadWithoutOverwrite>>;
+    try {
+      await fs.promises.mkdir(stagingDir);
+
+      if (isVideo) {
+        // Copy into the album filesystem before atomically publishing the final name.
+        await fs.promises.copyFile(
+          file.path,
+          stagingPath,
+          fs.constants.COPYFILE_EXCL
+        );
+      } else {
+        // For images, use sharp to auto-rotate based on EXIF orientation.
         const sharpTimeout = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Sharp processing timeout')), 120000) // 2 minute timeout
         );
@@ -933,23 +1095,40 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
         await Promise.race([
           sharp(file.path)
             .rotate() // Auto-rotate based on EXIF
-            .toFile(destPath),
+            .toFile(stagingPath),
           sharpTimeout
         ]);
-    
-        // Clean up temp file
-        fs.unlinkSync(file.path);
-      } catch (err: any) {
-        error(`[Upload] Failed to process ${file.originalname}:`, err.message);
-        try {
-          fs.unlinkSync(file.path);
-        } catch (cleanupErr) {
-          // Ignore cleanup errors
-        }
-        res.status(500).json({ error: `Failed to save file: ${err.message}` });
-        return;
       }
+
+      publishedUpload = await publishUploadWithoutOverwrite(
+        stagingPath,
+        albumPath,
+        preferredFilename
+      );
+    } catch (err: any) {
+      const action = isVideo ? 'move video' : 'process';
+      error(`[Upload] Failed to ${action} ${file.originalname}:`, err.message);
+      unlinkTempUpload(stagingPath);
+      try {
+        fs.rmdirSync(stagingDir);
+      } catch {
+        // Ignore cleanup errors
+      }
+      unlinkTempUpload(file.path);
+      const mediaLabel = isVideo ? 'video' : 'file';
+      res.status(500).json({ error: `Failed to save ${mediaLabel}: ${err.message}` });
+      return;
     }
+
+    unlinkTempUpload(stagingPath);
+    try {
+      fs.rmdirSync(stagingDir);
+    } catch {
+      // Ignore cleanup errors
+    }
+    unlinkTempUpload(file.path);
+
+    const { filename: sanitizedFilename, destPath } = publishedUpload;
 
     // Track photo upload for large batch detection (photos only, not videos)
     if (!isVideo) {
@@ -1123,6 +1302,8 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
       }
     }
   } catch (err) {
+    // Drop multer temp file on any unexpected failure path
+    unlinkTempUpload(req.file?.path);
     error('[AlbumManagement] Failed to upload file:', err);
     res.status(500).json({ error: 'Failed to upload file' });
   }
@@ -1131,146 +1312,6 @@ router.post("/:album/upload", requireManager, (req: Request, res: Response, next
 /**
  * Rename an album (updates database and moves directories)
  */
-router.patch("/:album/rename", requireManager, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { album } = req.params;
-    const { newName } = req.body;
-    
-    const sanitizedOldName = sanitizeName(album);
-    if (!sanitizedOldName) {
-      res.status(400).json({ error: 'Invalid album name' });
-      return;
-    }
-
-    if (!newName || typeof newName !== 'string') {
-      res.status(400).json({ error: 'New album name is required' });
-      return;
-    }
-
-    const sanitizedNewName = sanitizeName(newName);
-    if (!sanitizedNewName) {
-      res.status(400).json({ error: 'Invalid new album name. Use only letters, numbers, spaces, hyphens, and underscores.' });
-      return;
-    }
-
-    // Check if old album name equals new album name
-    if (sanitizedOldName === sanitizedNewName) {
-      res.status(400).json({ error: 'New name must be different from current name' });
-      return;
-    }
-
-    const photosDir = req.app.get("photosDir");
-    const optimizedDir = req.app.get("optimizedDir");
-    
-    const oldAlbumPath = path.join(photosDir, sanitizedOldName);
-    const newAlbumPath = path.join(photosDir, sanitizedNewName);
-    
-    // Check if old album exists
-    if (!fs.existsSync(oldAlbumPath)) {
-      res.status(404).json({ error: 'Album not found' });
-      return;
-    }
-
-    // Check if new album name already exists
-    if (fs.existsSync(newAlbumPath)) {
-      res.status(400).json({ error: 'An album with that name already exists' });
-      return;
-    }
-
-    // Get album state before renaming
-    const albumState = getAlbumState(sanitizedOldName);
-    if (!albumState) {
-      res.status(404).json({ error: 'Album not found in database' });
-      return;
-    }
-
-    // Update database FIRST before touching filesystem
-    // This way if DB update fails, filesystem is unchanged
-    const db = getDatabase();
-    
-    // Start transaction with foreign keys temporarily disabled
-    // This is needed because share_links has FK to albums(name) without ON UPDATE CASCADE
-    const transaction = db.transaction(() => {
-      // Temporarily disable foreign keys for this transaction
-      db.pragma('foreign_keys = OFF');
-      
-      // Update albums table
-      const result = db.prepare(`
-        UPDATE albums 
-        SET name = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE name = ?
-      `).run(sanitizedNewName, sanitizedOldName);
-      
-      if (result.changes === 0) {
-        throw new Error('Album not found in database');
-      }
-      
-      // Update image_metadata table
-      db.prepare(`
-        UPDATE image_metadata 
-        SET album = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE album = ?
-      `).run(sanitizedNewName, sanitizedOldName);
-      
-      // Update share_links table
-      db.prepare(`
-        UPDATE share_links 
-        SET album = ?
-        WHERE album = ?
-      `).run(sanitizedNewName, sanitizedOldName);
-      
-      // Re-enable foreign keys
-      db.pragma('foreign_keys = ON');
-    });
-    
-    transaction();
-    info(`Updated database: ${sanitizedOldName} -> ${sanitizedNewName}`);
-
-    // Now rename filesystem directories
-    // Rename photos directory
-    fs.renameSync(oldAlbumPath, newAlbumPath);
-    info(`Renamed photos directory: ${sanitizedOldName} -> ${sanitizedNewName}`);
-
-    // Rename optimized directories
-    ['thumbnail', 'modal', 'download'].forEach(dir => {
-      const oldOptimizedPath = path.join(optimizedDir, dir, sanitizedOldName);
-      const newOptimizedPath = path.join(optimizedDir, dir, sanitizedNewName);
-      if (fs.existsSync(oldOptimizedPath)) {
-        fs.renameSync(oldOptimizedPath, newOptimizedPath);
-        info(`Renamed optimized/${dir}: ${sanitizedOldName} -> ${sanitizedNewName}`);
-      }
-    });
-
-    // Rename video directory if it exists
-    const videoDir = req.app.get("videoDir");
-    if (videoDir) {
-      const oldVideoPath = path.join(videoDir, sanitizedOldName);
-      const newVideoPath = path.join(videoDir, sanitizedNewName);
-      if (fs.existsSync(oldVideoPath)) {
-        fs.renameSync(oldVideoPath, newVideoPath);
-        info(`Renamed video directory: ${sanitizedOldName} -> ${sanitizedNewName}`);
-      }
-    }
-
-    // Invalidate cache for both old and new album names
-    invalidateAlbumCache(sanitizedOldName);
-    invalidateAlbumCache(sanitizedNewName);
-
-    // Regenerate static JSON files
-    const appRoot = req.app.get('appRoot');
-    generateStaticJSONFiles(appRoot);
-
-    res.json({ 
-      success: true, 
-      oldName: sanitizedOldName,
-      newName: sanitizedNewName
-    });
-  } catch (err) {
-    error('[AlbumManagement] Failed to rename album:', err);
-    res.status(500).json({ error: 'Failed to rename album' });
-  }
-});
-
 /**
  * Toggle album published state
  */
@@ -1831,6 +1872,8 @@ router.post('/:albumName/video/:filename/upload-thumbnail', requireManager, uplo
     const { albumName, filename } = req.params;
     
     if (!albumName || !filename) {
+      // Multer may already have written the file to os.tmpdir()
+      unlinkTempUpload(req.file?.path);
       res.status(400).json({ error: 'Album name and filename are required' });
       return;
     }
@@ -1840,13 +1883,52 @@ router.post('/:albumName/video/:filename/upload-thumbnail', requireManager, uplo
       res.status(400).json({ error: 'No thumbnail file uploaded' });
       return;
     }
+
+    // Validate inputs to prevent directory traversal (mirror update-thumbnail)
+    const sanitizedAlbumName = sanitizeName(albumName);
+    if (!sanitizedAlbumName) {
+      unlinkTempUpload(req.file.path);
+      res.status(400).json({ error: 'Invalid album name' });
+      return;
+    }
+
+    // Basic security check for filename - no transformation (exact disk name)
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      unlinkTempUpload(req.file.path);
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    const sanitizedFilename = filename;
     
     const appRoot = req.app.get('appRoot');
     const dataDir = process.env.DATA_DIR || path.join(appRoot, 'data');
-    const optimizedDir = path.join(dataDir, 'optimized');
+    const optimizedDir = path.resolve(path.join(dataDir, 'optimized'));
+    const jpgName = sanitizedFilename.replace(/\.[^.]+$/, '.jpg');
+
+    const thumbnailPath = path.resolve(optimizedDir, 'thumbnail', sanitizedAlbumName, jpgName);
+    const modalPath = path.resolve(optimizedDir, 'modal', sanitizedAlbumName, jpgName);
+
+    // Reject if resolved paths escape optimizedDir
+    for (const resolved of [thumbnailPath, modalPath]) {
+      const relative = path.relative(optimizedDir, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        unlinkTempUpload(req.file.path);
+        res.status(400).json({ error: 'Invalid path' });
+        return;
+      }
+    }
+
+    // Ensure output directories exist (same as update-thumbnail)
+    const thumbnailDir = path.dirname(thumbnailPath);
+    const modalDir = path.dirname(modalPath);
+    if (!fs.existsSync(thumbnailDir)) {
+      fs.mkdirSync(thumbnailDir, { recursive: true });
+    }
+    if (!fs.existsSync(modalDir)) {
+      fs.mkdirSync(modalDir, { recursive: true });
+    }
     
     // Generate thumbnail (512px)
-    const thumbnailPath = path.join(optimizedDir, 'thumbnail', albumName, filename.replace(/\.[^.]+$/, '.jpg'));
     await sharp(req.file.path)
       .resize(512, 512, { 
         fit: 'inside',
@@ -1856,7 +1938,6 @@ router.post('/:albumName/video/:filename/upload-thumbnail', requireManager, uplo
       .toFile(thumbnailPath);
     
     // Generate modal preview (2048px)
-    const modalPath = path.join(optimizedDir, 'modal', albumName, filename.replace(/\.[^.]+$/, '.jpg'));
     await sharp(req.file.path)
       .resize(2048, 2048, { 
         fit: 'inside',
@@ -1866,15 +1947,15 @@ router.post('/:albumName/video/:filename/upload-thumbnail', requireManager, uplo
       .toFile(modalPath);
     
     // Clean up temporary file
-    fs.unlinkSync(req.file.path);
+    unlinkTempUpload(req.file.path);
     
-    info(`[VideoThumbnail] Uploaded custom thumbnail for ${albumName}/${filename}`);
+    info(`[VideoThumbnail] Uploaded custom thumbnail for ${sanitizedAlbumName}/${sanitizedFilename}`);
     
     // Regenerate static JSON to reflect thumbnail update
     try {
       info(`[VideoThumbnail] Regenerating static JSON after thumbnail upload`);
       generateStaticJSONFiles(appRoot);
-      invalidateAlbumCache(albumName);
+      invalidateAlbumCache(sanitizedAlbumName);
     } catch (err) {
       error('[VideoThumbnail] Failed to regenerate static JSON:', err);
     }
@@ -1884,6 +1965,8 @@ router.post('/:albumName/video/:filename/upload-thumbnail', requireManager, uplo
       message: 'Custom thumbnail uploaded successfully'
     });
   } catch (err) {
+    // Always remove multer diskStorage temp on sharp/IO failure
+    unlinkTempUpload(req.file?.path);
     error('[VideoThumbnail] Failed to upload custom thumbnail:', err);
     res.status(500).json({ error: 'Failed to upload custom thumbnail' });
   }

@@ -104,7 +104,11 @@
     "noContentYet": "まだコンテンツがありません",
     "albumEmpty": "このアルバムは空です。コンテンツを追加するにはログインしてください。",
     "homepageEmpty": "アルバムをいくつか追加するか、ホームページのトグルを使用してホームページに追加してください。",
-    "goToAdminPanel": "管理パネルに移動"
+    "goToAdminPanel": "管理パネルに移動",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "スライドショーを再生",
+    "pauseSlideshow": "スライドショーを一時停止"
   },
   "video": {
     "resolution": "解像度",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "このアルバムを公開ギャラリーに表示します。",
     "folderControlsPublished": "このアルバムはフォルダーから公開ステータスを継承します。",
     "homepageVisibilityDescription": "このアルバムの写真をホームページに含めます。",
-    "downloadsVisibilityDescription": "訪問者がこのアルバムからフルサイズの最適化された写真をダウンロードできるようにします。"
+    "downloadsVisibilityDescription": "訪問者がこのアルバムからフルサイズの最適化された写真をダウンロードできるようにします。",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "{{section}}設定が保存されました！",
@@ -913,7 +924,20 @@
     "custom": "カスタム...  ",
     "generate": "生成  ",
     "invalidCustomTime": "有効な分数を入力してください  ",
-    "copied": "✓ コピーしました！  "
+    "copied": "✓ コピーしました！  ",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "ビデオを共有",

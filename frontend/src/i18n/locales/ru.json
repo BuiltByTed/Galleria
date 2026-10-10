@@ -104,7 +104,11 @@
     "noContentYet": "Нет контента",
     "albumEmpty": "Этот альбом пуст. Пожалуйста, войдите, чтобы добавить контент.",
     "homepageEmpty": "Добавьте несколько альбомов или используйте переключатель на главной странице, чтобы добавить их на главную страницу.",
-    "goToAdminPanel": "Перейти в панель администратора"
+    "goToAdminPanel": "Перейти в панель администратора",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Запустить слайд-шоу",
+    "pauseSlideshow": "Приостановить слайд-шоу"
   },
   "video": {
     "resolution": "Разрешение",
@@ -367,7 +371,14 @@
     "publishedVisibilityDescription": "Показать этот альбом в публичной галерее.",
     "folderControlsPublished": "Этот альбом наследует статус публикации от своей папки.",
     "homepageVisibilityDescription": "Включить фотографии этого альбома на главной странице.",
-    "downloadsVisibilityDescription": "Разрешить посетителям загружать полноразмерные оптимизированные фотографии из этого альбома."
+    "downloadsVisibilityDescription": "Разрешить посетителям загружать полноразмерные оптимизированные фотографии из этого альбома.",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "Настройки {{section}} сохранены!",
@@ -913,7 +924,20 @@
     "custom": "Пользовательский...  ",
     "generate": "Сгенерировать  ",
     "invalidCustomTime": "Пожалуйста, введите допустимое количество минут  ",
-    "copied": "✓ Скопировано!  "
+    "copied": "✓ Скопировано!  ",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "Поделиться видео",

@@ -11,7 +11,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Photo, UploadingImage } from '../types';
 import { cacheBustValue } from '../../../../config';
-import { EditDocumentIcon, TrashIcon, HourglassIcon, VideoIcon } from '../../../icons';
+import { EditDocumentIcon, TrashIcon, HourglassIcon, VideoIcon, FolderArrowIcon } from '../../../icons';
 import { info } from '../../../../utils/logger';
 
 
@@ -26,6 +26,7 @@ interface AlbumGridItemProps {
   // Actions
   onEdit?: (photo: Photo) => void;
   onDelete?: (album: string, filename: string, title: string, thumbnail: string, mediaType?: 'photo' | 'video') => void;
+  onMove?: (album: string, filename: string, title: string, thumbnail: string, mediaType?: 'photo' | 'video') => void;
   onRetryOptimization?: (album: string, filename: string) => void;
   onRetryAI?: (album: string, filename: string) => void;
   onRetryUpload?: (filename: string, albumName: string) => void;
@@ -46,6 +47,7 @@ const AlbumGridItem: React.FC<AlbumGridItemProps> = ({
   photo,
   onEdit,
   onDelete,
+  onMove,
   onRetryOptimization,
   onRetryAI,
   onRetryUpload,
@@ -121,7 +123,7 @@ const AlbumGridItem: React.FC<AlbumGridItemProps> = ({
       e.preventDefault();
       
       const target = e.target as HTMLElement;
-      const clickedButton = target.closest('.btn-edit-photo, .btn-delete-photo, .btn-retry-photo');
+      const clickedButton = target.closest('.btn-edit-photo, .btn-delete-photo, .btn-retry-photo, .btn-move-photo');
       
       if (clickedButton) {
         // Tapped a button - let the button handler deal with it
@@ -147,7 +149,7 @@ const AlbumGridItem: React.FC<AlbumGridItemProps> = ({
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (isUploading) return;
     const target = e.target as HTMLElement;
-    if (!target.closest('.btn-edit-photo, .btn-delete-photo, .btn-retry-photo')) {
+    if (!target.closest('.btn-edit-photo, .btn-delete-photo, .btn-retry-photo, .btn-move-photo')) {
       setShowOverlay(false);
     }
   };
@@ -358,11 +360,34 @@ const AlbumGridItem: React.FC<AlbumGridItemProps> = ({
                 if (onEdit) onEdit(photoData);
               }}
               className="btn-edit-photo"
-              title="Edit title"
+              title={t('albumsManager.editMetadata')}
               type="button"
             >
               <EditDocumentIcon width="16" height="16" />
             </button>
+            {onMove && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const parts = photoData.id.split('/');
+                  const fname = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+                  onMove(photoData.album, decodeURIComponent(fname), photoData.title, photoData.thumbnail, photoData.media_type);
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const parts = photoData.id.split('/');
+                  const fname = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+                  onMove(photoData.album, decodeURIComponent(fname), photoData.title, photoData.thumbnail, photoData.media_type);
+                }}
+                className="btn-move-photo"
+                title={t('albumsManager.moveToAlbum')}
+                type="button"
+              >
+                <FolderArrowIcon width="16" height="16" />
+              </button>
+            )}
             {photoData.optimizationError && onRetryOptimization && (
               <button
                 onClick={(e) => {

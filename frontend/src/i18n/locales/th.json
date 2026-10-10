@@ -124,7 +124,11 @@
     "iso": "ขอโทษครับ/ค่ะ แต่ฉันไม่สามารถช่วยเหลือในคำขอนั้นได้",
     "dateTaken": "วันที่ถ่าย",
     "resolution": "ความละเอียด",
-    "duration": "ระยะเวลา"
+    "duration": "ระยะเวลา",
+    "location": "[EN] Location",
+    "viewMap": "[EN] Map",
+    "playSlideshow": "Play slideshow",
+    "pauseSlideshow": "Pause slideshow"
   },
   "video": {
     "resolution": "ความละเอียด",
@@ -461,7 +465,14 @@
     "publishedVisibilityDescription": "แสดงอัลบั้มนี้ในแกลเลอรีสาธารณะ",
     "folderControlsPublished": "อัลบั้มนี้สืบทอดสถานะการเผยแพร่จากโฟลเดอร์ของมัน",
     "homepageVisibilityDescription": "รวมรูปภาพของอัลบั้มนี้ในหน้าแรก",
-    "downloadsVisibilityDescription": "อนุญาตให้ผู้เข้าชมดาวน์โหลดรูปภาพขนาดเต็มที่ปรับแต่งแล้วจากอัลบั้มนี้"
+    "downloadsVisibilityDescription": "อนุญาตให้ผู้เข้าชมดาวน์โหลดรูปภาพขนาดเต็มที่ปรับแต่งแล้วจากอัลบั้มนี้",
+    "moveToAlbum": "[EN] Move to Album",
+    "moveToAlbumTitle": "[EN] Move to Album",
+    "moveToAlbumHint": "[EN] Choose a destination album for \"{{name}}\".",
+    "moveToAlbumFrom": "[EN] Currently in: {{album}}",
+    "moveToAlbumNoDestinations": "[EN] No other albums available. Create another album first.",
+    "photoMoved": "[EN] Moved to \"{{album}}\"",
+    "failedToMovePhoto": "[EN] Failed to move photo"
   },
   "settings": {
     "saved": "การตั้งค่า {{section}} บันทึกแล้ว!",
@@ -1005,7 +1016,20 @@
     "custom": "กำหนดเอง...",
     "generate": "สร้าง",
     "invalidCustomTime": "กรุณาใส่จำนวนของนาทีที่ถูกต้อง",
-    "copied": "✓ คัดลอกแล้ว!"
+    "copied": "✓ คัดลอกแล้ว!",
+    "failedToLoad": "[EN] Failed to load share links",
+    "failedToRevoke": "[EN] Failed to revoke share link",
+    "createLink": "[EN] Create Link",
+    "createNew": "[EN] Create new link",
+    "activeLinks": "[EN] Active links",
+    "noActiveLinks": "[EN] No active share links for this album.",
+    "loadingLinks": "[EN] Loading share links...",
+    "created": "[EN] Created",
+    "expires": "[EN] Expires",
+    "neverExpires": "[EN] Never",
+    "expired": "[EN] Expired",
+    "revoke": "[EN] Revoke",
+    "revoking": "[EN] Revoking..."
   },
   "videoShare": {
     "shareVideo": "แชร์วิดีโอ",

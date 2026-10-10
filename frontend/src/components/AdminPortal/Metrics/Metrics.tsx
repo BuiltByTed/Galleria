@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { API_URL } from '../../../config';
 import { fetchWithRateLimitCheck } from '../../../utils/fetchWrapper';
 import { formatNumber } from '../../../utils/formatters';
-import { formatDateFromMicroseconds, formatDurationDetailed } from '../../../utils/metricsHelpers';
+import { formatDateFromMicroseconds, formatDurationDetailed, formatLocalDate } from '../../../utils/metricsHelpers';
 import CustomDropdown from '../ConfigManager/components/CustomDropdown';
 import VisitorMap from './VisitorMap';
 import VisitorsChart from './VisitorsChart';
@@ -88,7 +88,7 @@ export default function Metrics() {
       for (let i = timeRange - 1; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatLocalDate(date);
         
         // Find if we have data for this date (normalize API date to YYYY-MM-DD format)
         const existing = actualData.find((d: any) => {

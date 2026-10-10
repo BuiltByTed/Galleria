@@ -1264,6 +1264,39 @@
   transform: scale(1.1);
 }
 
+.btn-move-photo {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--primary-color);
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 12;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.btn-move-photo svg {
+  pointer-events: none;
+}
+
+.btn-move-photo:hover:not(:disabled) {
+  background: var(--primary-color);
+  color: #000;
+  border-color: var(--primary-color);
+  transform: scale(1.1);
+}
+
 .status-indicator {
   width: 8px;
   height: 8px;

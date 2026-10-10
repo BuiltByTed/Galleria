@@ -13,7 +13,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never interrupt an active deployment. GitHub keeps the newest pending run
+  # in this group, so rapid pushes coalesce without reporting a healthy deploy
+  # as canceled or leaving its tracking ticket stranded.
+  cancel-in-progress: false
 
 jobs:
   deploy:

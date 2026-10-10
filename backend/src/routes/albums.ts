@@ -25,7 +25,7 @@ import {
   getAlbumsInFolder,
   incrementAlbumViewCount
 } from "../database.js";
-import { getAlbumAccess } from '../utils/album-access.js';
+import { getAlbumAccess, isRequestAuthenticated } from '../utils/album-access.js';
 import { error, warn, info, debug, verbose } from '../utils/logger.js';
 
 const router = Router();
@@ -252,8 +252,8 @@ router.get("/api/albums", (req: Request, res) => {
   // Re-fetch album states after sync
   const updatedAlbumStates = getAllAlbums();
   
-  // Check if user is authenticated (Passport or credentials)
-  const isAuthenticated = (req.isAuthenticated && req.isAuthenticated()) || !!(req.session as any)?.userId;
+  // Live DB check — deleted/inactive sessions must not list unpublished albums
+  const isAuthenticated = isRequestAuthenticated(req);
   
   verbose('[Albums] Auth check:', {
     isAuthenticated,

@@ -6,14 +6,16 @@ services:
     container_name: galleria
     ports:
       - "3000:3000"
-      - "3001:3001"
+      # Optional for existing split-domain reverse proxies:
+      # - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
       - DATA_DIR=/data
-      - FRONTEND_DOMAIN=${FRONTEND_DOMAIN:-http://localhost:3000}
-      - BACKEND_DOMAIN=${BACKEND_DOMAIN:-http://localhost:3001}
+      - DOMAIN=${DOMAIN:-}
+      - FRONTEND_DOMAIN=${FRONTEND_DOMAIN:-}
+      - BACKEND_DOMAIN=${BACKEND_DOMAIN:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - NVIDIA_VISIBLE_DEVICES=all

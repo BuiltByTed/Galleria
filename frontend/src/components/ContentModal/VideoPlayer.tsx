@@ -154,7 +154,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       console.log('[VideoPlayer] Using native HLS (Safari)');
-      video.src = masterPlaylistUrl;
+      // Native HLS has no CustomLoader — append share key so unpublished albums authorize
+      let nativeSrc = masterPlaylistUrl;
+      if (secretKey) {
+        const separator = nativeSrc.includes('?') ? '&' : '?';
+        nativeSrc = `${nativeSrc}${separator}key=${secretKey}`;
+      }
+      video.src = nativeSrc;
       video.addEventListener('loadedmetadata', () => {
         if (onLoadedRef.current) onLoadedRef.current();
       });

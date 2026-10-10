@@ -165,7 +165,7 @@ router.post('/stop', requireManager, (req: any, res: any) => {
  * Generate AI title for a single photo
  * Returns the title synchronously
  */
-router.post('/generate-single', requireManager, async (req: any, res: any) => {
+const generateSinglePhotoTitle = async (req: any, res: any) => {
   try {
     const { album, filename, language = 'en' } = req.body;
     
@@ -310,7 +310,10 @@ router.post('/generate-single', requireManager, async (req: any, res: any) => {
       message: err.message 
     });
   }
-});
+};
+
+router.post('/generate-single', requireManager, generateSinglePhotoTitle);
+router.post('/retry-photo', requireManager, generateSinglePhotoTitle);
 
 /**
  * POST /api/ai-titles/generate
@@ -522,9 +525,13 @@ router.post('/generate', requireManager, (req, res) => {
         });
       }
       
-      // Clean up after 5 minutes
+      // Clean up after 5 minutes — only if this job is still the tracked one
+      // (a later POST /generate may have replaced runningJobs.aiTitles)
+      const jobRef = runningJobs.aiTitles;
       setTimeout(() => {
-        runningJobs.aiTitles = null;
+        if (runningJobs.aiTitles === jobRef) {
+          runningJobs.aiTitles = null;
+        }
       }, 5 * 60 * 1000);
     }
   });
@@ -553,4 +560,3 @@ router.post('/generate', requireManager, (req, res) => {
 });
 
 export default router;
-

@@ -7,7 +7,8 @@ import { TFunction } from 'i18next';
 import { fetchWithRateLimitCheck } from '../../../../utils/fetchWrapper';
 import { API_URL } from '../../../../config';
 import { 
-  trackPhotoDeleted, 
+  trackPhotoDeleted,
+  trackPhotoMoved,
   trackPhotoRetryOptimization, 
   trackPhotoRetryAI 
 } from '../../../../utils/analytics';
@@ -26,11 +27,12 @@ interface PhotoHandlersProps {
   shuffleIntervalRef: React.MutableRefObject<NodeJS.Timeout | null>;
   speedupTimeoutsRef: React.MutableRefObject<NodeJS.Timeout[]>;
   setIsShuffling: React.Dispatch<React.SetStateAction<boolean>>;
+  loadAlbums?: () => Promise<void> | void;
   t: TFunction;
 }
 
 export const createPhotoHandlers = (props: PhotoHandlersProps) => {
-  const { /* selectedAlbum, */ loadPhotos, shufflePhotos, setMessage, showConfirmation, setAlbumPhotos, setOriginalPhotoOrder, setDeletingPhotoId, shuffleIntervalRef, speedupTimeoutsRef, setIsShuffling, t } = props;
+  const { /* selectedAlbum, */ loadPhotos, shufflePhotos, setMessage, showConfirmation, setAlbumPhotos, setOriginalPhotoOrder, setDeletingPhotoId, shuffleIntervalRef, speedupTimeoutsRef, setIsShuffling, loadAlbums, t } = props;
   
   // Retry optimization for a photo
   const handleRetryOptimization = async (album: string, filename: string): Promise<void> => {
@@ -182,6 +184,57 @@ export const createPhotoHandlers = (props: PhotoHandlersProps) => {
         }
       },
     });
+  };
+
+  /**
+   * Move a single photo/video to another album.
+   * Returns true on success so callers can close modals.
+   */
+  const handleMovePhoto = async (
+    sourceAlbum: string,
+    filename: string,
+    destinationAlbum: string,
+    photoTitle: string = ''
+  ): Promise<boolean> => {
+    const photoId = `${sourceAlbum}/${filename}`;
+    try {
+      const res = await fetchWithRateLimitCheck(
+        `${API_URL}/api/albums/${encodeURIComponent(sourceAlbum)}/photos/${encodeURIComponent(filename)}/move`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destinationAlbum }),
+          credentials: 'include',
+        }
+      );
+
+      if (!res.ok) {
+        let errorText = t('albumsManager.failedToMovePhoto');
+        try {
+          const body = await res.json();
+          if (body?.error) errorText = body.error;
+        } catch {
+          // ignore parse errors
+        }
+        setMessage({ type: 'error', text: errorText });
+        return false;
+      }
+
+      setAlbumPhotos((prev: Photo[]) => prev.filter((p: Photo) => p.id !== photoId));
+      setOriginalPhotoOrder((prev: Photo[]) => prev.filter((p: Photo) => p.id !== photoId));
+      trackPhotoMoved(sourceAlbum, destinationAlbum, photoId, photoTitle || filename);
+      setMessage({
+        type: 'success',
+        text: t('albumsManager.photoMoved', { album: destinationAlbum }),
+      });
+      if (loadAlbums) {
+        await loadAlbums();
+      }
+      return true;
+    } catch {
+      setMessage({ type: 'error', text: t('albumsManager.networkErrorOccurred') });
+      return false;
+    }
   };
 
   // Shuffle handlers
@@ -366,6 +419,7 @@ export const createPhotoHandlers = (props: PhotoHandlersProps) => {
 
   return {
     handleDeletePhoto,
+    handleMovePhoto,
     handleRetryOptimization,
     handleRetryAI,
     handleShuffleClick,

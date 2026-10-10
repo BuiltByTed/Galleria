@@ -1,21 +1,32 @@
 /**
  * Modal Controls Component
- * Renders the top control buttons: info, copy link, download, fullscreen, close
+ * Renders the top control buttons: info, copy link, download, play/pause, fullscreen, close
  */
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Photo } from './types';
-import { InfoIcon, CheckmarkIcon, LinkIcon, DownloadIcon, FullscreenIcon, CloseIcon } from '../icons/';
+import {
+  InfoIcon,
+  CheckmarkIcon,
+  LinkIcon,
+  DownloadIcon,
+  PlayIcon,
+  PauseIcon,
+  FullscreenIcon,
+  CloseIcon,
+} from '../icons/';
 
 interface ModalControlsProps {
   show: boolean;
   showInfo: boolean;
   copiedLink: boolean;
   isFullscreen: boolean;
+  isAutoplay: boolean;
   onToggleInfo: () => void;
   onCopyLink: (photo: Photo) => void;
   onDownload: (photo: Photo) => void;
+  onToggleAutoplay: () => void;
   onToggleFullscreen: () => void;
   onClose: () => void;
   selectedPhoto: Photo;
@@ -28,9 +39,11 @@ const ModalControls: React.FC<ModalControlsProps> = ({
   showInfo,
   copiedLink,
   isFullscreen,
+  isAutoplay,
   onToggleInfo,
   onCopyLink,
   onDownload,
+  onToggleAutoplay,
   onToggleFullscreen,
   onClose,
   selectedPhoto,
@@ -86,6 +99,24 @@ const ModalControls: React.FC<ModalControlsProps> = ({
       </div>
 
       <div className="modal-controls-right">
+        {/* Slideshow play/pause — next to fullscreen */}
+        <button
+          className={`slideshow-autoplay-toggle${isAutoplay ? ' active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleAutoplay();
+          }}
+          title={isAutoplay ? t('photo.pauseSlideshow') : t('photo.playSlideshow')}
+          aria-pressed={isAutoplay}
+          aria-label={isAutoplay ? t('photo.pauseSlideshow') : t('photo.playSlideshow')}
+        >
+          {isAutoplay ? (
+            <PauseIcon width="20" height="20" />
+          ) : (
+            <PlayIcon width="20" height="20" />
+          )}
+        </button>
+
         {/* Fullscreen button */}
         <button
           className="fullscreen-toggle"

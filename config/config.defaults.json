@@ -5,7 +5,7 @@
     },
     "frontend": {
       "port": 3000,
-      "apiUrl": "http://localhost:3001"
+      "apiUrl": ""
     },
     "backend": {
       "port": 3001,

@@ -9,6 +9,7 @@ export interface User {
   auth_methods: string[];
   status?: string;
   picture?: string;
+  /** Present only on create-invite response, never on list payload */
   invite_token?: string | null;
 }
 

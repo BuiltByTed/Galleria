@@ -8,7 +8,8 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { requireAuth } from '../auth/middleware.js';
+import { requireAdmin } from '../auth/middleware.js';
+import { csrfProtection } from '../security.js';
 import { error, warn, info, debug, verbose } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,8 +17,8 @@ const __dirname = path.dirname(__filename);
 
 const router = Router();
 
-// Restart endpoint - triggers container restart or PM2 restart
-router.post('/restart', requireAuth, (req, res) => {
+// Restart endpoint - admin only (system settings); CSRF like other mutating routes
+router.post('/restart', csrfProtection, requireAdmin, (req, res) => {
   try {
     // Get user info for logging
     const userId = (req.session as any)?.userId;

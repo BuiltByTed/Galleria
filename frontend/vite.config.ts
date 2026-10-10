@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { visualizer } from 'rollup-plugin-visualizer';
 import fs from 'fs';
+import { publicApiUrl, publicSiteUrl } from '../shared/deployment.js';
 import path from 'path';
 
 // Load .env file if it exists (for non-Docker deployments)
@@ -28,7 +29,7 @@ const defaultConfig = {
     frontend: {
       port: 3000,
       // Use BACKEND_DOMAIN from .env if available, otherwise localhost
-      apiUrl: envVars.BACKEND_DOMAIN || "http://localhost:3001"
+      apiUrl: ""
     }
   },
   branding: {
@@ -68,21 +69,11 @@ try {
 
 const envConfig = config.environment;
 
-// Derive site URL from API URL
-// If apiUrl starts with https://, replace api. with www.
-// Otherwise (http://localhost), replace :3001 with :3000
-const siteUrl = envConfig.frontend.apiUrl.startsWith('https://') 
-  ? envConfig.frontend.apiUrl.replace('api.', 'www.').replace('api-', 'www-')
-  : envConfig.frontend.apiUrl.replace(/:\d+$/, ':' + (envConfig.frontend.port || 3000));
-
-// Determine if we should listen on all interfaces (for remote dev)
-// Listen on 0.0.0.0 if the apiUrl is not localhost
-const isRemoteDev = !envConfig.frontend.apiUrl.includes('localhost');
-
-// Extract HMR host from site URL if remote dev
-const hmrHost = isRemoteDev 
-  ? new URL(siteUrl).hostname 
-  : 'localhost';
+const deploymentEnv = { ...envVars, ...process.env };
+envConfig.frontend.apiUrl = publicApiUrl(envConfig, deploymentEnv);
+const siteUrl = publicSiteUrl(envConfig, deploymentEnv) || 'http://localhost:3000';
+const isRemoteDev = !new URL(siteUrl).hostname.match(/^(localhost|127\.0\.0\.1)$/);
+const hmrHost = new URL(siteUrl).hostname;
 
 if (configExists) {
   console.log('Vite config loaded:');
@@ -159,6 +150,11 @@ export default defineConfig({
     host: isRemoteDev ? '0.0.0.0' : '127.0.0.1',
     port: envConfig.frontend.port || 3000,
     strictPort: false,
+    proxy: Object.fromEntries(['/api', '/photos', '/optimized', '/videos', '/sitemap.xml'].map(prefix => [prefix, {
+      target: deploymentEnv.BACKEND_INTERNAL_URL || 'http://127.0.0.1:3001',
+      changeOrigin: false,
+      xfwd: true,
+    }])),
     hmr: {
       host: hmrHost,
     },

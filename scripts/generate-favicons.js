@@ -9,7 +9,7 @@ const projectRoot = path.resolve(__dirname, '..');
 
 const defaultIconsDir = path.join(projectRoot, 'config', 'icons');
 const publicDir = path.join(projectRoot, 'frontend', 'public');
-const photosDir = path.join(projectRoot, 'data', 'photos');
+const photosDir = path.join(process.env.DATA_DIR || path.join(projectRoot, 'data'), 'photos');
 const customAvatarPath = path.join(photosDir, 'avatar.png');
 
 console.log('🎨 Setting up icons and favicons...');

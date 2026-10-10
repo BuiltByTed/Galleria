@@ -218,10 +218,13 @@ router.post('/regenerate', requireManager, (req, res) => {
         });
       }
       
-      // Clean up after 5 minutes
+      // Clean up after 5 minutes — only clear if no newer job replaced us
+      const jobRef = runningVideoOptimizationJob;
       setTimeout(() => {
-        info('[VideoOptimization] Cleaning up completed job');
-        runningVideoOptimizationJob = null;
+        if (runningVideoOptimizationJob === jobRef) {
+          info('[VideoOptimization] Cleaning up completed job');
+          runningVideoOptimizationJob = null;
+        }
       }, 5 * 60 * 1000);
     }
   });
@@ -400,10 +403,13 @@ router.post('/reprocess', requireManager, (req, res) => {
         });
       }
       
-      // Clean up after 5 minutes
+      // Clean up after 5 minutes — only clear if no newer job replaced us
+      const jobRef = runningVideoOptimizationJob;
       setTimeout(() => {
-        info('[VideoReprocessing] Cleaning up completed job');
-        runningVideoOptimizationJob = null;
+        if (runningVideoOptimizationJob === jobRef) {
+          info('[VideoReprocessing] Cleaning up completed job');
+          runningVideoOptimizationJob = null;
+        }
       }, 5 * 60 * 1000);
     }
   });

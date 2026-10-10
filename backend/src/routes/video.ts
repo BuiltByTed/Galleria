@@ -9,8 +9,35 @@ import path from "path";
 import { error, info } from '../utils/logger.js';
 import { getAlbumState, getShareLinkBySecret, isShareLinkExpired } from '../database.js';
 import { requireAuth } from '../auth/middleware.js';
+import { isRequestAuthenticated } from '../utils/album-access.js';
+import { isOriginAllowed } from '../config.js';
+import { streamFileToResponse } from '../utils/stream-file-response.js';
 
 const router = Router();
+
+/**
+ * Reflect Origin only when it passes the global allowlist.
+ * Unconditional reflection + credentials bypassed server CORS (regression of #821).
+ */
+const setCredentialedCorsHeaders = (req: Request, res: Response): void => {
+  const origin = req.headers.origin;
+  if (typeof origin === 'string' && isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+};
+
+/** Same rules for writeHead() paths that cannot call setHeader after headers start. */
+const credentialedCorsHeaderRecord = (req: Request): Record<string, string> => {
+  const origin = req.headers.origin;
+  if (typeof origin === 'string' && isOriginAllowed(origin)) {
+    return {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
+    };
+  }
+  return {};
+};
 
 /**
  * Sanitize path components to prevent directory traversal
@@ -26,21 +53,71 @@ const sanitizePath = (name: string): string | null => {
 };
 
 /**
- * Check if user has access to album (authenticated, published, or valid share link)
+ * Extract share key from request query (validated hex format).
  */
-const hasAlbumAccess = (req: Request, album: string): boolean => {
-  // Check authentication
-  const isAuthenticated = (req.isAuthenticated && req.isAuthenticated()) || !!(req.session as any)?.userId;
-  
-  // Check for share link in query parameter
+const getShareKeyFromQuery = (req: Request): string | null => {
   // Note: req.query.key can be a string OR an array if multiple keys are provided
   const shareKeyParam = req.query.key;
   const shareKey = Array.isArray(shareKeyParam) ? shareKeyParam[0] : shareKeyParam;
+  if (shareKey && typeof shareKey === 'string' && /^[a-f0-9]{64}$/i.test(shareKey)) {
+    return shareKey;
+  }
+  return null;
+};
+
+/**
+ * Safari native HLS does not preserve master-playlist query params on relative
+ * media-playlist / segment URIs. Rewrite URI lines so the share key travels with
+ * every follow-on request (HLS.js CustomLoader handles this on non-Safari).
+ */
+const appendKeyToPlaylistUris = (content: string, key: string): string => {
+  return content
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      // Skip empty lines and HLS tags/comments
+      if (!trimmed || trimmed.startsWith('#')) {
+        return line;
+      }
+      const separator = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${separator}key=${key}`;
+    })
+    .join('\n');
+};
+
+/**
+ * Send an m3u8 playlist, rewriting relative URIs to include share key when present.
+ */
+const sendPlaylist = (req: Request, res: Response, playlistPath: string): void => {
+  res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  setCredentialedCorsHeaders(req, res);
+
+  const shareKey = getShareKeyFromQuery(req);
+  if (shareKey) {
+    // Do not cache key-bearing rewrites (key is a secret capability URL)
+    res.setHeader('Cache-Control', 'private, no-store');
+    const content = fs.readFileSync(playlistPath, 'utf-8');
+    res.send(appendKeyToPlaylistUris(content, shareKey));
+    return;
+  }
+
+  res.sendFile(playlistPath);
+};
+
+/**
+ * Check if user has access to album (authenticated, published, or valid share link)
+ */
+const hasAlbumAccess = (req: Request, album: string): boolean => {
+  // Live DB check — deleted/inactive sessions must not stream unpublished video
+  const isAuthenticated = isRequestAuthenticated(req);
+  
+  const shareKey = getShareKeyFromQuery(req);
   let hasValidShareLink = false;
   
   info(`[Video] Access check: album=${album}, shareKey=${shareKey ? String(shareKey).substring(0, 16) + '...' : 'none'}, isAuth=${isAuthenticated}`);
   
-  if (shareKey && typeof shareKey === 'string' && /^[a-f0-9]{64}$/i.test(shareKey)) {
+  if (shareKey) {
     const shareLink = getShareLinkBySecret(shareKey);
     info(`[Video] Share link lookup: found=${!!shareLink}, match=${shareLink?.album === album}, expired=${shareLink ? isShareLinkExpired(shareLink) : 'N/A'}`);
     if (shareLink && shareLink.album === album && !isShareLinkExpired(shareLink)) {
@@ -127,20 +204,7 @@ const serveMasterPlaylist = async (req: Request, res: Response, album: string, f
     }
     
     info('[Video] Master playlist found, sending file');
-
-    // Set appropriate headers for HLS
-    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    
-    // Set CORS headers to allow credentials
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
-
-    // Send the master playlist file
-    res.sendFile(masterPlaylistPath);
+    sendPlaylist(req, res, masterPlaylistPath);
   } catch (err) {
     error('[Video] Failed to serve master playlist:', err);
     error('[Video] Error details:', {
@@ -219,19 +283,7 @@ router.get("/:album/:filename/:resolution/playlist.m3u8", async (req: Request, r
       return;
     }
 
-    // Set appropriate headers for HLS
-    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    
-    // Set CORS headers to allow credentials
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
-
-    // Send the playlist file
-    res.sendFile(playlistPath);
+    sendPlaylist(req, res, playlistPath);
   } catch (err) {
     error('[Video] Failed to serve playlist:', err);
     res.status(500).json({ error: 'Failed to serve playlist' });
@@ -306,13 +358,7 @@ router.get("/:album/:filename/:resolution/:segment", async (req: Request, res: R
     // Set appropriate headers for MPEG-TS segments
     res.setHeader('Content-Type', 'video/mp2t');
     res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache segments for 1 year
-    
-    // Set CORS headers to allow credentials
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
+    setCredentialedCorsHeaders(req, res);
 
     // Send the segment file
     res.sendFile(segmentPath);
@@ -447,32 +493,35 @@ router.get("/:album/:filename/original.mp4", requireAuth, async (req: Request, r
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       const chunksize = (end - start) + 1;
-      const file = fs.createReadStream(rotatedVideoPath, { start, end });
 
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
         'Content-Type': 'video/mp4',
-        'Access-Control-Allow-Origin': req.headers.origin || '*',
-        'Access-Control-Allow-Credentials': 'true',
+        ...credentialedCorsHeaderRecord(req),
       });
 
-      file.pipe(res);
+      await streamFileToResponse(rotatedVideoPath, res, { start, end });
     } else {
       // Send entire file
       res.writeHead(200, {
         'Content-Length': fileSize,
         'Content-Type': 'video/mp4',
         'Accept-Ranges': 'bytes',
-        'Access-Control-Allow-Origin': req.headers.origin || '*',
-        'Access-Control-Allow-Credentials': 'true',
+        ...credentialedCorsHeaderRecord(req),
       });
 
-      fs.createReadStream(rotatedVideoPath).pipe(res);
+      await streamFileToResponse(rotatedVideoPath, res);
     }
   } catch (err) {
     error('[Video] Failed to serve rotated video:', err);
+    if (res.headersSent) {
+      if (!res.destroyed) {
+        res.destroy();
+      }
+      return;
+    }
     res.status(500).json({ error: 'Failed to serve video' });
   }
 });
