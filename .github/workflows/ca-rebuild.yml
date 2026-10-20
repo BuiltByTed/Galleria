@@ -1,0 +1,49 @@
+name: Rebuild and verify image CA store
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    environment: Docker-Build-Prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: version
+        run: echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Record previous CA store
+        run: |
+          docker pull tedcharles/galleria:latest
+          python3 security/verify-ca.py tedcharles/galleria:latest --output "$RUNNER_TEMP/ca-old.json"
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          platforms: linux/amd64
+          pull: true
+          no-cache: true
+          load: true
+          push: false
+          tags: |
+            tedcharles/galleria:latest
+            tedcharles/galleria:v${{ steps.version.outputs.value }}
+      - name: Verify before publishing
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        run: python3 security/verify-ca.py "$IMAGE_ID" --baseline "$RUNNER_TEMP/ca-old.json" --output "$RUNNER_TEMP/ca-new.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ca-verification
+          path: ${{ runner.temp }}/ca-*.json
+      - name: Publish verified image
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          docker push tedcharles/galleria:latest
+          docker push "tedcharles/galleria:v$VERSION"
