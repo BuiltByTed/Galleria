@@ -1,6 +1,11 @@
 # Combined Frontend + Backend Dockerfile
 # Use Debian-based Node image for better NVIDIA compatibility
 FROM node:22-slim
+# Mozilla bug 2083449: rebuild the distro store and exclude emSign ECC G3.
+COPY security/remove-g3.sh /usr/local/sbin/remove-g3
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/* && sh /usr/local/sbin/remove-g3
+ENV NODE_OPTIONS=--use-openssl-ca SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -72,3 +77,5 @@ RUN mkdir -p /data/logs
 # Use the startup script
 CMD ["./start-docker.sh"]
 
+
+RUN sh /usr/local/sbin/remove-g3
